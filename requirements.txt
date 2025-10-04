@@ -1,0 +1,10 @@
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+sentence-transformers==2.2.2
+chromadb==0.3.28
+python-multipart==0.0.6
+requests==2.31.0
+pydantic==1.10.12
+openai==0.27.8
+python-dotenv==1.0.0
+sseclient-py==1.7.2
