@@ -1,65 +1,28 @@
-Lightweight RAG (retrieval-augmented generation) setup
-===================================================
+# NASA Space Hackathon — Backend
 
-This folder contains a lightweight RAG prototype that uses OpenAI embeddings (remote) and a small on-disk index
-instead of heavy local models (sentence-transformers, chromadb).
+This repository contains the backend prototype for the NASA Hackathon project. The RAG (Retrieval Augmented Generation) service lives under `backend/RAG` and provides endpoints for ingesting documents and querying a retrieval-augmented LLM chat endpoint.
 
 Quick start
------------
 
 1. Create a virtual environment and install dependencies:
 
-   python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
-
-2. Set your OpenAI API key in the environment (PowerShell):
-
-   $env:OPENAI_API_KEY = 'sk-...'
-
-3. Ingest text files using `ingest.py` or the `/ingest` endpoint. The index will be stored in `./chroma_db`.
-
-Notes
------
-- The retriever now uses the OpenAI Embeddings API (`text-embedding-3-small` by default). You can change the
-  model with the `OPENAI_EMBEDDING_MODEL` environment variable.
-- This design reduces local resource usage but requires an OpenAI API key and network access.
-# RAG Backend (Prototype)
-
-This folder contains a small prototype Retrieval-Augmented Generation (RAG) backend using FastAPI, SentenceTransformers for embeddings, and Chroma as the vector store.
-
-Folders / files
-- `app.py` - FastAPI server exposing `/ingest` and `/query` endpoints
-- `ingest.py` - simple ingestion utility to load text files from a directory, chunk them, embed and store into Chroma
-- `retriever.py` - helper functions for retrieving top-k passages
-- `query_example.py` - small client that calls `/query`
-- `requirements.txt` - python deps
-
-Notes
-- This is a prototype. For production use Pinecone/Weaviate/managed DB and secure your API keys.
-
-Setup
-
-1. Create a virtualenv and install dependencies:
-
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r backend\RAG\requirements.txt
 ```
 
-2. Create your `.env` from the example and set `OPENAI_API_KEY`:
+2. Copy env example and set your OpenAI key:
 
 ```powershell
-copy .env.example .env
-# edit .env and set OPENAI_API_KEY
+copy backend\RAG\.env.example backend\RAG\.env
+# Edit backend\RAG\.env and set OPENAI_API_KEY
 ```
 
-Running
+3. Run the RAG server (FastAPI):
 
 ```powershell
-uvicorn app:app --reload --port 8000
+uvicorn backend.RAG.app:app --reload --port 8000
 ```
 
-Endpoints
+Contributing
 
-- `POST /ingest` - upload text files to ingest into Chroma
-- `POST /chat` - query the RAG chat. Request payload: `{ "question":"...","top_k":5, "stream": false }`
-
-
+Please follow the code style used in the project and supply small, focused PRs. See `backend/RAG/README.md` for RAG-specific instructions.
