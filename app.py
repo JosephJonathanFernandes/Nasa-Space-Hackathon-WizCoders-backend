@@ -100,8 +100,8 @@ async def chat(req: QueryRequest, request: Request):
         except Exception as e:
             yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
         # at the end send final event with sources
-    final_sources = list({d.get("metadata", {}).get("source") for d in docs if d.get("metadata", {}).get("source")})
-    yield "data: " + json.dumps({"done": True, "sources": final_sources}) + "\n\n"
+        final_sources = list({d.get("metadata", {}).get("source") for d in docs if d.get("metadata", {}).get("source")})
+        yield "data: " + json.dumps({"done": True, "sources": final_sources}) + "\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

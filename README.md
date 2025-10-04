@@ -12,3 +12,30 @@ Folders / files
 Notes
 - This is a prototype. For production use Pinecone/Weaviate/managed DB and secure your API keys.
 
+Setup
+
+1. Create a virtualenv and install dependencies:
+
+```powershell
+python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+```
+
+2. Create your `.env` from the example and set `OPENAI_API_KEY`:
+
+```powershell
+copy .env.example .env
+# edit .env and set OPENAI_API_KEY
+```
+
+Running
+
+```powershell
+uvicorn app:app --reload --port 8000
+```
+
+Endpoints
+
+- `POST /ingest` - upload text files to ingest into Chroma
+- `POST /chat` - query the RAG chat. Request payload: `{ "question":"...","top_k":5, "stream": false }`
+
+
