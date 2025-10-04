@@ -4,6 +4,8 @@ uvicorn[standard]==0.22.0
 numpy>=1.26.0
 requests==2.31.0
 pydantic==1.10.12
-openai>=1.0.0
+gemma-sdk>=1.0.0
 python-dotenv==1.0.0
 python-multipart==0.0.6
+sentence-transformers==2.2.2
+transformers==4.35.2

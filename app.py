@@ -5,13 +5,16 @@ from typing import List, Optional, Dict, Any
 import uvicorn
 import os
 import json
-import openai
-
+# Try to import a Gemma SDK placeholder if available, otherwise None
+try:
+    import gemma as _gemma_placeholder
+except Exception:
+    _gemma_placeholder = None
 from retriever import Retriever
-from config import OPENAI_API_KEY
+from config import GEMMA_API_KEY, client
 
-if not OPENAI_API_KEY:
-    print("Warning: OPENAI_API_KEY not set. /chat will fail until it's provided in the environment.")
+if not GEMMA_API_KEY:
+    print("Warning: GEMMA_API_KEY not set. /chat will fail until it's provided in the environment.")
 
 app = FastAPI(title="RAG Prototype")
 retriever = Retriever()
@@ -28,7 +31,15 @@ async def ingest(files: List[UploadFile] = File(...)):
     """Ingest uploaded text/plain files into the vector DB."""
     saved = []
     for f in files:
-        content = (await f.read()).decode("utf-8")
+        raw = await f.read()
+        # try utf-8, then latin-1, then replace malformed bytes to avoid UnicodeDecodeError
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = raw.decode("latin-1")
+            except Exception:
+                content = raw.decode("utf-8", errors="replace")
         retriever.add_documents_from_string(content, source=f.filename)
         saved.append(f.filename)
     return {"ingested_files": saved}
@@ -56,8 +67,8 @@ def _build_prompt(question: str, docs: List[Dict[str, Any]]) -> List[Dict[str, s
 
 @app.post("/chat")
 async def chat(req: QueryRequest, request: Request):
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured on the server")
+    if not GEMMA_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMMA_API_KEY not configured on the server")
 
     question = req.question
     top_k = req.top_k or 5
@@ -65,12 +76,21 @@ async def chat(req: QueryRequest, request: Request):
 
     messages = _build_prompt(question, docs)
 
-    model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
+    model = os.environ.get("GEMMA_MODEL", "gpt-3.5-turbo")
 
     if not req.stream:
         # Non-streaming call
-        resp = openai.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
-        answer = resp["choices"][0]["message"]["content"]
+        if client is not None:
+            resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)
+            # support attribute or dict-style access
+            try:
+                answer = resp.choices[0].message.content
+            except Exception:
+                answer = resp["choices"][0]["message"]["content"]
+        else:
+            # legacy/placeholder path: call through the gemma placeholder if available
+            resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
+            answer = resp["choices"][0]["message"]["content"]
         # collect unique sources
         sources = []
         for d in docs:
@@ -82,14 +102,31 @@ async def chat(req: QueryRequest, request: Request):
     # Streaming path: return Server-Sent-Events
     def event_stream():
         try:
-            stream_resp = openai.ChatCompletion.create(model=model, messages=messages, temperature=0.2, stream=True)
+            if client is not None:
+                stream_resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2, stream=True)
+            else:
+                stream_resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2, stream=True)
+
             for chunk in stream_resp:
-                # chunk is a dict with 'choices' list containing deltas
+                # chunk may be an object with attribute access or a dict
                 try:
-                    delta = chunk.get("choices", [])[0].get("delta", {})
-                    content = delta.get("content")
+                    # try modern SDK attributes
+                    delta = None
+                    if hasattr(chunk, "choices"):
+                        c = chunk.choices[0]
+                        # modern streaming may use delta or message
+                        delta = getattr(c, "delta", None) or getattr(c, "message", None)
+                    else:
+                        delta = chunk.get("choices", [])[0].get("delta", {})
+
+                    # extract content from delta if present
+                    content = None
+                    if isinstance(delta, dict):
+                        content = delta.get("content")
+                    else:
+                        content = getattr(delta, "content", None)
+
                     if content:
-                        # SSE data frame
                         yield "data: " + json.dumps({"delta": content}) + "\n\n"
                 except Exception:
                     continue

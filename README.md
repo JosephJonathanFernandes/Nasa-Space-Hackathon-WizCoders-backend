@@ -10,11 +10,11 @@ Quick start
 python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r backend\RAG\requirements.txt
 ```
 
-2. Copy env example and set your OpenAI key:
+2. Copy env example and set your Gemma key:
 
 ```powershell
 copy backend\RAG\.env.example backend\RAG\.env
-# Edit backend\RAG\.env and set OPENAI_API_KEY
+# Edit backend\RAG\.env and set GEMMA_API_KEY or GEMMA_BASE_URL and GEMMA_TOKEN
 ```
 
 3. Run the RAG server (FastAPI):

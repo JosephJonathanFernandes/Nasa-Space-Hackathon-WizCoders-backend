@@ -4,12 +4,16 @@ import json
 from typing import List, Dict, Any, Optional
 
 import numpy as np
-import openai
-from config import OPENAI_API_KEY
+from config import GEMMA_API_KEY, client
 
+# Try to import a Gemma SDK placeholder if available. Keep None if not installed.
+try:
+    import gemma as _gemma_placeholder
+except Exception:
+    _gemma_placeholder = None
 
 class Retriever:
-    """Lightweight, file-backed retriever using OpenAI embeddings and numpy.
+    """Lightweight, file-backed retriever using Gemma embeddings and numpy.
 
     Stores documents and metadata in a JSON index and embeddings in a numpy .npy file.
     This keeps the setup minimal and removes heavy local models.
@@ -21,11 +25,10 @@ class Retriever:
 
         self.index_path = os.path.join(self.persist_directory, "index.json")
         self.emb_path = os.path.join(self.persist_directory, "embeddings.npy")
+        # pick an embedding model; can be overridden with GEMMA_EMBEDDING_MODEL env var
+        self.embedding_model = os.environ.get("GEMMA_EMBEDDING_MODEL", "text-embedding-3-small")
 
-        # pick an OpenAI embedding model; can be overridden with OPENAI_EMBEDDING_MODEL env var
-        self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-
-        # openai.api_key is configured by config.py at import time
+        # placeholder.client api key is configured by config.py at import time
 
         # in-memory structures
         self.docs: List[Dict[str, Any]] = []
@@ -69,14 +72,32 @@ class Retriever:
         return chunks
 
     def _get_embedding(self, text: str) -> List[float]:
-        # OpenAI embedding API call for a single input
-        if not openai.api_key:
-            raise RuntimeError("OPENAI_API_KEY not configured; cannot create embeddings")
-        resp = openai.Embedding.create(model=self.embedding_model, input=[text])
-        return resp["data"][0]["embedding"]
+    # Gemma (via placeholder client) embedding API call for a single input
+    # require either legacy gemma.api_key or the modern client from config
+        from config import client as _client
+        if (_gemma_placeholder is None or not getattr(_gemma_placeholder, 'api_key', None)) and _client is None:
+            # No GEMMA credentials: fall back to a local sentence-transformers model
+            try:
+                from sentence_transformers import SentenceTransformer
+            except Exception:
+                raise RuntimeError("GEMMA_API_KEY not configured and sentence-transformers not installed; cannot create embeddings")
+            # use a small, fast model suitable for local use
+            model = SentenceTransformer('all-MiniLM-L6-v2')
+            vec = model.encode(text)
+            return vec.tolist()
+        # Prefer the modern client if available
+        if _client is not None:
+            resp = _client.embeddings.create(model=self.embedding_model, input=[text])
+            return resp.data[0].embedding
+        # Fallback to legacy API surface on the placeholder SDK if present
+        if _gemma_placeholder is not None:
+            resp = _gemma_placeholder.Embedding.create(model=self.embedding_model, input=[text])
+            return resp["data"][0]["embedding"]
+        # No embedding provider available
+        raise RuntimeError("No Gemma client available and sentence-transformers not installed; cannot create embeddings")
 
     def add_documents_from_string(self, text: str, source: str = "inline"):
-        """Chunk text, compute embeddings via OpenAI, and persist to disk."""
+        """Chunk text, compute embeddings via Gemma, and persist to disk."""
         chunks = self._chunk_text(text)
         texts = [c.strip() for c in chunks if c.strip()]
         if not texts:
