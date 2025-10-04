@@ -9,10 +9,10 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 
 # embeddings / NLP
-sentence-transformers
 sentence-transformers==2.2.2
 transformers==4.35.2
 huggingface-hub>=0.18.0
+PyPDF2>=3.0.0
 
 # Optional: install hf_xet for improved XET-backed caching performance on HF hub
 # pip install "huggingface_hub[hf_xet]"  OR  pip install hf_xet

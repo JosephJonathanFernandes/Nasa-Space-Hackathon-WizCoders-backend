@@ -23,6 +23,13 @@ Notes:
 
 - To persist environment variables across sessions, use System Settings -> Environment Variables, or set them in your PowerShell profile.
 
+PDF ingestion support
+- The project now supports ingesting PDF files using `ingest.py`. This requires `PyPDF2` which is included in `requirements.txt`.
+- Usage:
+  python ingest.py <folder-containing-pdfs-and-txt>
+
+The script will recursively find `.txt` and `.pdf` files under the folder and ingest their text into the retriever.
+
 Local deterministic fallback embedding (optional):
 - By default the app will use a deterministic SHA256-based embedding fallback when no Gemma client
   and no `sentence-transformers` are available. This keeps the server running for development, but
