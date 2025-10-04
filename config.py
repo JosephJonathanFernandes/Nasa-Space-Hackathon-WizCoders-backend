@@ -4,7 +4,8 @@ import os
 load_dotenv()
 
 # Expose the key for other modules
-GEMMA_API_KEY = os.environ.get("GEMMA_API_KEY")
+# Prefer an explicit GEMMA_API_KEY, but allow OPENROUTER_API_KEY to be used
+GEMMA_API_KEY = os.environ.get("GEMMA_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
 # Create and expose a modern Gemma client instance. We attempt to import a
 # Create and expose a client. We support three modes:

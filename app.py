@@ -1,4 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+import traceback
+import logging
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -67,86 +69,96 @@ def _build_prompt(question: str, docs: List[Dict[str, Any]]) -> List[Dict[str, s
 
 @app.post("/chat")
 async def chat(req: QueryRequest, request: Request):
-    if not GEMMA_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMMA_API_KEY not configured on the server")
+    try:
+        if not GEMMA_API_KEY:
+            raise HTTPException(status_code=500, detail="GEMMA_API_KEY not configured on the server")
 
-    question = req.question
-    top_k = req.top_k or 5
-    docs = retriever.retrieve(question, top_k=top_k)
+        question = req.question
+        top_k = req.top_k or 5
+        docs = retriever.retrieve(question, top_k=top_k)
 
-    messages = _build_prompt(question, docs)
+        messages = _build_prompt(question, docs)
 
-    model = os.environ.get("GEMMA_MODEL", "gpt-3.5-turbo")
+        model = os.environ.get("GEMMA_MODEL", "gpt-3.5-turbo")
 
-    if not req.stream:
-        # Non-streaming call
-        if client is not None:
-            resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)
-            # support attribute or dict-style access
-            try:
-                answer = resp.choices[0].message.content
-            except Exception:
-                answer = resp["choices"][0]["message"]["content"]
-        else:
-            # legacy/placeholder path: ensure placeholder SDK is present
-            if _gemma_placeholder is None:
-                raise HTTPException(status_code=500, detail=(
-                    "No Gemma client available to create chat completions. "
-                    "Set GEMMA_API_KEY/GEMMA_BASE_URL or install a compatible 'gemma' SDK."
-                ))
-            resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
-            answer = resp["choices"][0]["message"]["content"]
-        # collect unique sources
-        sources = []
-        for d in docs:
-            s = d.get("metadata", {}).get("source")
-            if s and s not in sources:
-                sources.append(s)
-        return {"answer": answer, "sources": sources, "docs": docs}
-
-    # Streaming path: return Server-Sent-Events
-    def event_stream():
-        try:
+        if not req.stream:
+            # Non-streaming call
             if client is not None:
-                stream_resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2, stream=True)
+                resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)
+                # support attribute or dict-style access
+                try:
+                    answer = resp.choices[0].message.content
+                except Exception:
+                    answer = resp["choices"][0]["message"]["content"]
             else:
+                # legacy/placeholder path: ensure placeholder SDK is present
                 if _gemma_placeholder is None:
                     raise HTTPException(status_code=500, detail=(
-                        "No Gemma client available to create chat completions (streaming). "
+                        "No Gemma client available to create chat completions. "
                         "Set GEMMA_API_KEY/GEMMA_BASE_URL or install a compatible 'gemma' SDK."
                     ))
-                stream_resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2, stream=True)
+                resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
+                answer = resp["choices"][0]["message"]["content"]
+            # collect unique sources
+            sources = []
+            for d in docs:
+                s = d.get("metadata", {}).get("source")
+                if s and s not in sources:
+                    sources.append(s)
+            return {"answer": answer, "sources": sources, "docs": docs}
 
-            for chunk in stream_resp:
-                # chunk may be an object with attribute access or a dict
-                try:
-                    # try modern SDK attributes
-                    delta = None
-                    if hasattr(chunk, "choices"):
-                        c = chunk.choices[0]
-                        # modern streaming may use delta or message
-                        delta = getattr(c, "delta", None) or getattr(c, "message", None)
-                    else:
-                        delta = chunk.get("choices", [])[0].get("delta", {})
+        # Streaming path: return Server-Sent-Events
+        def event_stream():
+            try:
+                if client is not None:
+                    stream_resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2, stream=True)
+                else:
+                    if _gemma_placeholder is None:
+                        raise HTTPException(status_code=500, detail=(
+                            "No Gemma client available to create chat completions (streaming). "
+                            "Set GEMMA_API_KEY/GEMMA_BASE_URL or install a compatible 'gemma' SDK."
+                        ))
+                    stream_resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2, stream=True)
 
-                    # extract content from delta if present
-                    content = None
-                    if isinstance(delta, dict):
-                        content = delta.get("content")
-                    else:
-                        content = getattr(delta, "content", None)
+                for chunk in stream_resp:
+                    # chunk may be an object with attribute access or a dict
+                    try:
+                        # try modern SDK attributes
+                        delta = None
+                        if hasattr(chunk, "choices"):
+                            c = chunk.choices[0]
+                            # modern streaming may use delta or message
+                            delta = getattr(c, "delta", None) or getattr(c, "message", None)
+                        else:
+                            delta = chunk.get("choices", [])[0].get("delta", {})
 
-                    if content:
-                        yield "data: " + json.dumps({"delta": content}) + "\n\n"
-                except Exception:
-                    continue
-        except Exception as e:
-            yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
-        # at the end send final event with sources
-        final_sources = list({d.get("metadata", {}).get("source") for d in docs if d.get("metadata", {}).get("source")})
-        yield "data: " + json.dumps({"done": True, "sources": final_sources}) + "\n\n"
+                        # extract content from delta if present
+                        content = None
+                        if isinstance(delta, dict):
+                            content = delta.get("content")
+                        else:
+                            content = getattr(delta, "content", None)
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+                        if content:
+                            yield "data: " + json.dumps({"delta": content}) + "\n\n"
+                    except Exception:
+                        continue
+            except Exception as e:
+                yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
+            # at the end send final event with sources
+            final_sources = list({d.get("metadata", {}).get("source") for d in docs if d.get("metadata", {}).get("source")})
+            yield "data: " + json.dumps({"done": True, "sources": final_sources}) + "\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+    except HTTPException:
+        # re-raise known HTTP exceptions unchanged
+        raise
+    except Exception as e:
+        # log full traceback to server console for debugging
+        logging.error("Unhandled exception in /chat: %s", e)
+        traceback.print_exc()
+        # return a generic 500 but instruct user to check server logs
+        raise HTTPException(status_code=500, detail="Internal server error. See server logs for traceback.")
 
 
 if __name__ == "__main__":

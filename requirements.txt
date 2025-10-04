@@ -20,3 +20,7 @@ PyPDF2>=3.0.0
 # Note: If you have a vendor Gemma SDK available, install it here (package name
 # depends on your vendor). Otherwise the application supports using an
 # OpenRouter/Gemma-compatible HTTP endpoint via GEMMA_BASE_URL in `config.py`.
+
+# Optional: for fast vector search. On Windows use the cpu build: `pip install faiss-cpu`.
+# Installing faiss is optional; the demo script falls back to a NumPy retriever if faiss is not available.
+faiss-cpu; platform_system=="Windows"
