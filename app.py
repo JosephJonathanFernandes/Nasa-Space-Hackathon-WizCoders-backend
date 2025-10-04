@@ -88,7 +88,12 @@ async def chat(req: QueryRequest, request: Request):
             except Exception:
                 answer = resp["choices"][0]["message"]["content"]
         else:
-            # legacy/placeholder path: call through the gemma placeholder if available
+            # legacy/placeholder path: ensure placeholder SDK is present
+            if _gemma_placeholder is None:
+                raise HTTPException(status_code=500, detail=(
+                    "No Gemma client available to create chat completions. "
+                    "Set GEMMA_API_KEY/GEMMA_BASE_URL or install a compatible 'gemma' SDK."
+                ))
             resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
             answer = resp["choices"][0]["message"]["content"]
         # collect unique sources
@@ -105,6 +110,11 @@ async def chat(req: QueryRequest, request: Request):
             if client is not None:
                 stream_resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2, stream=True)
             else:
+                if _gemma_placeholder is None:
+                    raise HTTPException(status_code=500, detail=(
+                        "No Gemma client available to create chat completions (streaming). "
+                        "Set GEMMA_API_KEY/GEMMA_BASE_URL or install a compatible 'gemma' SDK."
+                    ))
                 stream_resp = _gemma_placeholder.ChatCompletion.create(model=model, messages=messages, temperature=0.2, stream=True)
 
             for chunk in stream_resp:

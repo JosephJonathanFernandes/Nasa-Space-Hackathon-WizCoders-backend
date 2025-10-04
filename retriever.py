@@ -76,11 +76,24 @@ class Retriever:
     # require either legacy gemma.api_key or the modern client from config
         from config import client as _client
         if (_gemma_placeholder is None or not getattr(_gemma_placeholder, 'api_key', None)) and _client is None:
-            # No GEMMA credentials: fall back to a local sentence-transformers model
+            # No Gemma credentials: try local sentence-transformers model first, then a deterministic
+            # hashing-based fallback if sentence-transformers isn't installed. The fallback is
+            # deterministic but low-quality for semantic search; it's only to keep the app running
+            # when no external embedding provider is available.
             try:
                 from sentence_transformers import SentenceTransformer
             except Exception:
-                raise RuntimeError("GEMMA_API_KEY not configured and sentence-transformers not installed; cannot create embeddings")
+                allow_fallback = os.environ.get("GEMMA_ALLOW_LOCAL_FALLBACK", "1")
+                if allow_fallback.lower() in ("1", "true", "yes"):
+                    # use a deterministic hash-based embedding as a last-resort fallback
+                    return self._local_hash_embedding(text, dim=384)
+                # provide a clearer, actionable error message if fallback disabled
+                raise RuntimeError(
+                    "No Gemma client configured (GEMMA_API_KEY/GEMMA_BASE_URL) and the 'sentence-transformers' package is not installed.\n"
+                    "Install it with: pip install sentence-transformers\n"
+                    "Or set GEMMA_API_KEY / GEMMA_BASE_URL environment variables so the service client can be used.\n"
+                    "If you want a low-quality deterministic local fallback instead, set GEMMA_ALLOW_LOCAL_FALLBACK=1 in the environment."
+                )
             # use a small, fast model suitable for local use
             model = SentenceTransformer('all-MiniLM-L6-v2')
             vec = model.encode(text)
@@ -94,7 +107,40 @@ class Retriever:
             resp = _gemma_placeholder.Embedding.create(model=self.embedding_model, input=[text])
             return resp["data"][0]["embedding"]
         # No embedding provider available
-        raise RuntimeError("No Gemma client available and sentence-transformers not installed; cannot create embeddings")
+        # This path should be unreachable because the earlier branch either
+        # returns or raises, but keep a defensive error message.
+        raise RuntimeError(
+            "No Gemma client available and sentence-transformers not installed; cannot create embeddings.\n"
+            "Install sentence-transformers or provide GEMMA_API_KEY / GEMMA_BASE_URL."
+        )
+
+    def _local_hash_embedding(self, text: str, dim: int = 384) -> List[float]:
+        """Deterministic fallback embedding based on SHA256 hashing.
+
+        This produces a pseudo-embedding of length `dim` with values in [-1, 1].
+        It's deterministic and fast but not semantically meaningful. Use only when
+        real embeddings are unavailable and you prefer the app to run.
+        """
+        import hashlib
+
+        out = []
+        i = 0
+        # Generate enough hash material by hashing text||counter
+        while len(out) < dim:
+            h = hashlib.sha256()
+            h.update(text.encode('utf-8'))
+            h.update(i.to_bytes(2, 'little'))
+            digest = h.digest()
+            # split digest into 8-byte chunks and convert to floats
+            for j in range(0, len(digest), 4):
+                if len(out) >= dim:
+                    break
+                chunk = digest[j:j+4]
+                val = int.from_bytes(chunk, 'little', signed=False)
+                # normalize into [-1, 1]
+                out.append((val / 0xFFFFFFFF) * 2.0 - 1.0)
+            i += 1
+        return out[:dim]
 
     def add_documents_from_string(self, text: str, source: str = "inline"):
         """Chunk text, compute embeddings via Gemma, and persist to disk."""
