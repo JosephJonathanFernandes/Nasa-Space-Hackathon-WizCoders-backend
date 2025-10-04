@@ -6,16 +6,12 @@ import uvicorn
 import os
 import json
 import openai
-from dotenv import load_dotenv
 
 from retriever import Retriever
+from config import OPENAI_API_KEY
 
-load_dotenv()
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     print("Warning: OPENAI_API_KEY not set. /chat will fail until it's provided in the environment.")
-else:
-    openai.api_key = OPENAI_API_KEY
 
 app = FastAPI(title="RAG Prototype")
 retriever = Retriever()

@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 
 import numpy as np
 import openai
+from config import OPENAI_API_KEY
 
 
 class Retriever:
@@ -24,9 +25,7 @@ class Retriever:
         # pick an OpenAI embedding model; can be overridden with OPENAI_EMBEDDING_MODEL env var
         self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 
-        # ensure openai key is available if not already set by caller
-        if not getattr(openai, "api_key", None):
-            openai.api_key = os.environ.get("OPENAI_API_KEY")
+        # openai.api_key is configured by config.py at import time
 
         # in-memory structures
         self.docs: List[Dict[str, Any]] = []
