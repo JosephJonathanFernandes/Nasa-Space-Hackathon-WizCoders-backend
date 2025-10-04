@@ -1,11 +1,22 @@
 fastapi>=0.85.1,<1.0
 uvicorn[standard]==0.22.0
-# lightweight retriever dependencies
+
+# core/runtime
 numpy>=1.26.0
 requests==2.31.0
 pydantic==1.10.12
-gemma-sdk>=1.0.0
 python-dotenv==1.0.0
 python-multipart==0.0.6
+
+# embeddings / NLP
+sentence-transformers
 sentence-transformers==2.2.2
 transformers==4.35.2
+huggingface-hub>=0.18.0
+
+# Optional: install hf_xet for improved XET-backed caching performance on HF hub
+# pip install "huggingface_hub[hf_xet]"  OR  pip install hf_xet
+
+# Note: If you have a vendor Gemma SDK available, install it here (package name
+# depends on your vendor). Otherwise the application supports using an
+# OpenRouter/Gemma-compatible HTTP endpoint via GEMMA_BASE_URL in `config.py`.
