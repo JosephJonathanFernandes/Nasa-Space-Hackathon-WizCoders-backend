@@ -22,3 +22,15 @@ Notes:
   $env:GEMMA_BASE_URL = "https://api.openrouter.example"
 
 - To persist environment variables across sessions, use System Settings -> Environment Variables, or set them in your PowerShell profile.
+
+Local deterministic fallback embedding (optional):
+- By default the app will use a deterministic SHA256-based embedding fallback when no Gemma client
+  and no `sentence-transformers` are available. This keeps the server running for development, but
+  embeddings produced this way are NOT semantically meaningful. To disable the fallback, set:
+  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '0'
+
+Example: enable fallback (default):
+  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '1'
+
+Example: explicitly disable fallback:
+  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '0'
