@@ -1,3 +1,27 @@
+Lightweight RAG (retrieval-augmented generation) setup
+===================================================
+
+This folder contains a lightweight RAG prototype that uses OpenAI embeddings (remote) and a small on-disk index
+instead of heavy local models (sentence-transformers, chromadb).
+
+Quick start
+-----------
+
+1. Create a virtual environment and install dependencies:
+
+   python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+
+2. Set your OpenAI API key in the environment (PowerShell):
+
+   $env:OPENAI_API_KEY = 'sk-...'
+
+3. Ingest text files using `ingest.py` or the `/ingest` endpoint. The index will be stored in `./chroma_db`.
+
+Notes
+-----
+- The retriever now uses the OpenAI Embeddings API (`text-embedding-3-small` by default). You can change the
+  model with the `OPENAI_EMBEDDING_MODEL` environment variable.
+- This design reduces local resource usage but requires an OpenAI API key and network access.
 # RAG Backend (Prototype)
 
 This folder contains a small prototype Retrieval-Augmented Generation (RAG) backend using FastAPI, SentenceTransformers for embeddings, and Chroma as the vector store.

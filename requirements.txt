@@ -1,10 +1,9 @@
-fastapi==0.95.2
+fastapi>=0.85.1,<1.0
 uvicorn[standard]==0.22.0
-sentence-transformers==2.2.2
-chromadb==0.3.28
-python-multipart==0.0.6
+# lightweight retriever dependencies
+numpy>=1.26.0
 requests==2.31.0
 pydantic==1.10.12
-openai==0.27.8
+openai>=1.0.0
 python-dotenv==1.0.0
-sseclient-py==1.7.2
+python-multipart==0.0.6

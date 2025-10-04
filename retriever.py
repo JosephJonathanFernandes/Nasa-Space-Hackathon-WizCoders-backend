@@ -1,28 +1,61 @@
 
 import os
-from typing import List, Dict, Any
+import json
+from typing import List, Dict, Any, Optional
 
-from sentence_transformers import SentenceTransformer
-import chromadb
-from chromadb.utils import embedding_functions
+import numpy as np
+import openai
 
 
 class Retriever:
+    """Lightweight, file-backed retriever using OpenAI embeddings and numpy.
+
+    Stores documents and metadata in a JSON index and embeddings in a numpy .npy file.
+    This keeps the setup minimal and removes heavy local models.
+    """
+
     def __init__(self, persist_directory: str = "./chroma_db"):
-        self.persist_directory = persist_directory
-        # ensure directory
+        self.persist_directory = os.path.abspath(persist_directory)
         os.makedirs(self.persist_directory, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=self.persist_directory)
-        self.collection = None
-        self.embedding_model = SentenceTransformer("all-mpnet-base-v2")
-        # create or get collection
-        try:
-            self.collection = self.client.get_collection("nasa_exoplanets")
-        except Exception:
-            self.collection = self.client.create_collection("nasa_exoplanets")
+
+        self.index_path = os.path.join(self.persist_directory, "index.json")
+        self.emb_path = os.path.join(self.persist_directory, "embeddings.npy")
+
+        # pick an OpenAI embedding model; can be overridden with OPENAI_EMBEDDING_MODEL env var
+        self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+
+        # ensure openai key is available if not already set by caller
+        if not getattr(openai, "api_key", None):
+            openai.api_key = os.environ.get("OPENAI_API_KEY")
+
+        # in-memory structures
+        self.docs: List[Dict[str, Any]] = []
+        self.embeddings: Optional[np.ndarray] = None
+
+        self._load_index()
+
+    def _load_index(self):
+        if os.path.exists(self.index_path) and os.path.exists(self.emb_path):
+            try:
+                with open(self.index_path, "r", encoding="utf-8") as f:
+                    self.docs = json.load(f)
+                self.embeddings = np.load(self.emb_path)
+            except Exception:
+                # if loading fails, start fresh
+                self.docs = []
+                self.embeddings = None
+        else:
+            self.docs = []
+            self.embeddings = None
+
+    def _save_index(self):
+        with open(self.index_path, "w", encoding="utf-8") as f:
+            json.dump(self.docs, f, ensure_ascii=False)
+        if self.embeddings is not None:
+            np.save(self.emb_path, self.embeddings)
 
     def _chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-        """Naive sliding window chunker"""
+        """Simple sliding-window chunker (character-based)."""
         chunks = []
         start = 0
         length = len(text)
@@ -32,28 +65,76 @@ class Retriever:
             start = end - overlap
             if start < 0:
                 start = 0
+            if end == length:
+                break
         return chunks
 
+    def _get_embedding(self, text: str) -> List[float]:
+        # OpenAI embedding API call for a single input
+        if not openai.api_key:
+            raise RuntimeError("OPENAI_API_KEY not configured; cannot create embeddings")
+        resp = openai.Embedding.create(model=self.embedding_model, input=[text])
+        return resp["data"][0]["embedding"]
+
     def add_documents_from_string(self, text: str, source: str = "inline"):
+        """Chunk text, compute embeddings via OpenAI, and persist to disk."""
         chunks = self._chunk_text(text)
         texts = [c.strip() for c in chunks if c.strip()]
         if not texts:
             return
-        embeddings = self.embedding_model.encode(texts, convert_to_numpy=True)
-        ids = [f"{source}_{i}" for i in range(len(texts))]
-        metadatas = [{"source": source, "chunk_index": i} for i in range(len(texts))]
-        self.collection.add(documents=texts, embeddings=embeddings.tolist(), metadatas=metadatas, ids=ids)
+
+        # compute embeddings one-by-one to avoid large single requests
+        new_embs = []
+        for t in texts:
+            emb = self._get_embedding(t)
+            new_embs.append(np.array(emb, dtype=np.float32))
+
+        new_embs = np.vstack(new_embs)
+
+        start_index = len(self.docs)
+        ids = [f"{source}_{start_index + i}" for i in range(len(texts))]
+        for i, t in enumerate(texts):
+            self.docs.append({
+                "id": ids[i],
+                "document": t,
+                "metadata": {"source": source, "chunk_index": start_index + i},
+            })
+
+        if self.embeddings is None or self.embeddings.size == 0:
+            self.embeddings = new_embs
+        else:
+            self.embeddings = np.vstack([self.embeddings, new_embs])
+
+        self._save_index()
 
     def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        q_emb = self.embedding_model.encode([query], convert_to_numpy=True)[0].tolist()
-        results = self.collection.query(query_embeddings=[q_emb], n_results=top_k)
-        # results contain ids, documents, metadatas, distances
-        out = []
-        for i in range(len(results.get("ids", [[]])[0])):
+        """Return top_k documents nearest to the query using cosine similarity.
+
+        distance is returned as 1 - cosine_similarity so smaller is better.
+        """
+        if not self.docs or self.embeddings is None or self.embeddings.shape[0] == 0:
+            return []
+
+        q_emb = np.array(self._get_embedding(query), dtype=np.float32)
+
+        # cosine similarity
+        emb_norms = np.linalg.norm(self.embeddings, axis=1)
+        q_norm = np.linalg.norm(q_emb)
+        denom = emb_norms * (q_norm if q_norm != 0 else 1e-10)
+        denom[denom == 0] = 1e-10
+        sims = (self.embeddings @ q_emb) / denom
+
+        top_k = min(top_k, sims.shape[0])
+        idx = np.argsort(-sims)[:top_k]
+
+        out: List[Dict[str, Any]] = []
+        for i in idx:
+            d = self.docs[int(i)]
             out.append({
-                "id": results["ids"][0][i],
-                "document": results["documents"][0][i],
-                "metadata": results["metadatas"][0][i],
-                "distance": results.get("distances", [[]])[0][i],
+                "id": d.get("id"),
+                "document": d.get("document"),
+                "metadata": d.get("metadata"),
+                "distance": float(1.0 - float(sims[int(i)])),
             })
         return out
+
