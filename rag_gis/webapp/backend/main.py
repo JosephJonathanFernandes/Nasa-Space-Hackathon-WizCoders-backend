@@ -162,7 +162,7 @@ async def predict(file: UploadFile = File(...)):
 
     Behavior:
       - Accepts exactly one uploaded CSV file (required)
-      - Expects an `id` column and numeric feature columns (like `exo_10.csv`)
+      - Expects an id column and numeric feature columns (like exo_10.csv)
       - Uses the TestModel/lgbm_model.pkl (loaded lazily) to predict each row
       - Returns a simple list: [{"id": <id>, "label": "<label>"}, ...]
     """
@@ -236,7 +236,25 @@ async def predict(file: UploadFile = File(...)):
                 pred0 = preds[0]
             except Exception as e:
                 logging.error("Model prediction failed for row %s: %s", idx, e)
-                results.append({"id": ids[idx], "label": None})
+                # attempt to pull transit_depth and orbital_period from the original dataframe row
+                try:
+                    transit_depth = df.at[idx, "transit_depth"]
+                except Exception:
+                    transit_depth = None
+                try:
+                    orbital_period = df.at[idx, "orbital_period"]
+                except Exception:
+                    orbital_period = None
+
+                results.append(
+                    {
+                        "id": ids[idx],
+                        "transit_depth": transit_depth,
+                        "orbital_period": orbital_period,
+                        "transit_duration": None,
+                        "label": None,
+                    }
+                )
                 continue
 
             # map numeric prediction to label if possible
@@ -245,7 +263,24 @@ async def predict(file: UploadFile = File(...)):
             except Exception:
                 lab = str(pred0)
 
-            results.append({"id": ids[idx], "label": lab})
+            # attempt to pull transit_depth and orbital_period from the original dataframe row
+            try:
+                transit_depth = df.at[idx, "transit_depth"]
+            except Exception:
+                transit_depth = None
+            try:
+                orbital_period = df.at[idx, "orbital_period"]
+            except Exception:
+                orbital_period = None
+
+            results.append(
+                {
+                    "id": ids[idx],
+                    "transit_depth": transit_depth,
+                    "orbital_period": orbital_period,
+                    "label": lab,
+                }
+            )
 
         return {"predictions": results}
     except HTTPException:
@@ -253,7 +288,7 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         logging.error("Error in /predict: %s", e)
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))  
 
 
 def get_llm():
