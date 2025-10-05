@@ -11,6 +11,9 @@ import logging
 import traceback
 import sys
 import pathlib
+import io
+import matplotlib.pyplot as plt
+from lightkurve import read
 
 # Prefer relative import when the package is imported as `webapp.backend`.
 # This allows `uvicorn webapp.backend.main:app` to find `model_utils` in the same package.
@@ -262,6 +265,54 @@ Question:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.post("/upload_fits/")
+async def upload_fits_file(file: UploadFile = File(...)):
+    """Upload a FITS file, read a light curve using lightkurve, and return a PNG plot.
+
+    Expects a single file upload (FITS). Returns image/png.
+    """
+    try:
+        contents = await file.read()
+        lc_file = io.BytesIO(contents)
+
+        # Use lightkurve to read the file. This returns a LightCurve or LightCurveCollection.
+        lc = read(lc_file)
+
+        # For LightCurveCollection, pick the first LightCurve
+        try:
+            time_arr = lc.time.value
+            flux_arr = lc.flux.value
+        except Exception:
+            # Try indexing if it's a collection
+            if hasattr(lc, '__len__') and len(lc) > 0:
+                single = lc[0]
+                time_arr = single.time.value
+                flux_arr = single.flux.value
+            else:
+                raise
+
+        # Plot
+        plt.style.use('seaborn-v0_8-darkgrid')
+        plt.figure(figsize=(12, 7))
+        plt.plot(time_arr, flux_arr, color='teal', linewidth=0.8)
+        plt.xlabel("Time (days)", fontsize=12)
+        plt.ylabel("Normalized Flux", fontsize=12)
+        plt.title(f"Light Curve for {file.filename}", fontsize=14, fontweight='bold')
+        plt.grid(True, linestyle='--', alpha=0.6)
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+
+        return StreamingResponse(buf, media_type="image/png")
+
+    except Exception as e:
+        logging.error("Error in /upload_fits/: %s", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error processing FITS file: {e}")
 
 
 @app.get("/stream_chat")
