@@ -267,7 +267,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/upload_fits/")
+@app.post("/upload_fits")
 async def upload_fits_file(file: UploadFile = File(...)):
     """Upload a FITS file, read a light curve using lightkurve, and return a PNG plot.
 
