@@ -132,62 +132,83 @@ class PredictRequest(BaseModel):
 
 @app.post("/predict")
 async def predict(files: Optional[List[UploadFile]] = File(None), payload: Optional[PredictRequest] = None):
-    """Predict endpoint: accepts either an uploaded CSV file (first row header optional) or a JSON body with `features`.
+    """Predict endpoint: accepts an uploaded CSV file (preferred) or a JSON body with `features` as fallback.
 
-    CSV format: numeric columns only (or columns will be converted to floats). Returns per-row predictions.
-    JSON format: {"features": [f1, f2, ...]} returns a single prediction.
+    CSV flow (preferred):
+      - read the first uploaded file as CSV (header allowed)
+      - extract `id` column if present (otherwise use row indices)
+      - drop `id` (and `class` if present) and use remaining columns as features
+      - run prediction per-row using `predict_single` and return a list of {id, prediction, raw}
+
+    JSON flow (fallback): {"features": [f1, f2, ...]} returns a single prediction.
     """
     try:
         bundle = _get_model_bundle()
 
-        # If JSON payload provided and has features, run single prediction
-        if payload is not None and payload.features is not None:
-            res = predict_single(bundle, payload.features)
-            return {"predictions": [res]}
-
-        # If files provided, expect CSV in the first file
+        # If files provided, expect CSV in the first file (primary flow)
         if files and len(files) > 0:
             f = files[0]
             raw = await f.read()
-            text = None
             try:
                 text = raw.decode("utf-8")
             except Exception:
                 text = raw.decode("latin-1")
 
-            # parse CSV into rows of floats
-            import csv
+            # Use pandas for robust CSV parsing and numeric conversion
             from io import StringIO
+            import pandas as pd
 
-            reader = csv.reader(StringIO(text))
-            rows = list(reader)
-            # If first row looks like header (non-numeric), skip it
-            def _is_numeric_row(r):
-                try:
-                    [float(x) for x in r]
-                    return True
-                except Exception:
-                    return False
+            try:
+                df = pd.read_csv(StringIO(text))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Failed to parse CSV file")
 
-            if len(rows) == 0:
+            if df.shape[0] == 0:
                 raise HTTPException(status_code=400, detail="Empty CSV file")
 
-            if not _is_numeric_row(rows[0]) and len(rows) > 1 and _is_numeric_row(rows[1]):
-                rows = rows[1:]
+            # Extract ids (if present) otherwise use row indices
+            if 'id' in df.columns:
+                ids = df['id'].tolist()
+            else:
+                ids = list(range(len(df)))
+
+            # drop id and class (if present) before prediction
+            drop_cols = [c for c in ('id', 'class') if c in df.columns]
+            X_df = df.drop(columns=drop_cols)
+
+            # Ensure numeric features
+            try:
+                X = X_df.astype(float)
+            except Exception:
+                try:
+                    X = X_df.apply(pd.to_numeric, errors='raise')
+                except Exception:
+                    raise HTTPException(status_code=400, detail="CSV contains non-numeric values in feature columns")
 
             predictions = []
-            for r in rows:
+            for idx, row in X.iterrows():
+                feats = row.tolist()
                 try:
-                    feats = [float(x) for x in r]
-                except Exception:
-                    raise HTTPException(status_code=400, detail=f"Non-numeric value in row: {r}")
-                pred = predict_single(bundle, feats)
-                predictions.append(pred)
+                    res = predict_single(bundle, feats)
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Prediction failed for row {idx}: {e}")
+
+                predictions.append({
+                    'id': ids[idx],
+                    'prediction': res.get('prediction'),
+                    'raw': res.get('raw'),
+                    'success': res.get('success', False),
+                })
 
             return {"predictions": predictions}
 
+        # JSON fallback: single-sample features
+        if payload is not None and payload.features is not None:
+            res = predict_single(bundle, payload.features)
+            return {"predictions": [{"id": None, "prediction": res.get('prediction'), "raw": res.get('raw'), "success": res.get('success', False)}]}
+
         # nothing to do
-        raise HTTPException(status_code=400, detail="Provide features JSON or upload a CSV file")
+        raise HTTPException(status_code=400, detail="Upload a CSV file or provide features JSON")
     except HTTPException:
         raise
     except Exception as e:
