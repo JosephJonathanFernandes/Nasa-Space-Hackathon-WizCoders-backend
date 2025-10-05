@@ -8,3 +8,9 @@ langchain-chroma
 chromadb
 sentence-transformers
 requests
+langchain_huggingface
+langchain
+lightkurve
+langchain_chroma
+langchain_community
+python-multipart
