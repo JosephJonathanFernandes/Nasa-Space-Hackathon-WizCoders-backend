@@ -23,7 +23,7 @@ except Exception:
     # with running the module from different working directories).
     repo_file = pathlib.Path(__file__).resolve()
     try:
-        rag_dir = repo_file.parents[3] / 'RAG'
+        rag_dir = repo_file.parents[3] / "RAG"
         sys.path.insert(0, str(rag_dir))
         from model_utils import load_bundle, predict_single
     except Exception:
@@ -49,8 +49,8 @@ def _get_model_bundle():
         # preferred models directory: backend/RAG/models (use same repo layout)
         this_file = pathlib.Path(__file__).resolve()
         try:
-            rag_dir = this_file.parents[3] / 'RAG'
-            models_dir = str(rag_dir / 'models')
+            rag_dir = this_file.parents[3] / "RAG"
+            models_dir = str(rag_dir / "models")
             if not os.path.exists(models_dir):
                 # fallback to local models dir next to this file
                 models_dir = os.path.join(os.path.dirname(__file__), "models")
@@ -59,6 +59,7 @@ def _get_model_bundle():
 
         _MODEL_BUNDLE = load_bundle(models_dir=models_dir)
     return _MODEL_BUNDLE
+
 
 load_dotenv()
 
@@ -71,10 +72,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Models
 class ChatRequest(BaseModel):
     question: str
     history: Optional[List[Dict[str, str]]] = None
+
 
 class ChatResponse(BaseModel):
     answer: str
@@ -98,21 +101,33 @@ def get_retriever():
         from langchain_huggingface.embeddings import HuggingFaceEmbeddings
         from langchain_chroma import Chroma
 
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
         # instantiate Chroma against the same persist_directory and collection_name used in your notebook
         # Different versions of the langchain-chroma wrapper expect different kwarg names for the
         # embedding object (embedding_function or embedding). Try the common variants and fall back
         # to constructing in the way supported by the installed package.
         try:
-            vectordb = Chroma(persist_directory="chroma_db", collection_name="testing", embedding_function=embeddings)
+            vectordb = Chroma(
+                persist_directory="chroma_db",
+                collection_name="testing",
+                embedding_function=embeddings,
+            )
         except TypeError:
             try:
-                vectordb = Chroma(persist_directory="chroma_db", collection_name="testing", embedding=embeddings)
+                vectordb = Chroma(
+                    persist_directory="chroma_db",
+                    collection_name="testing",
+                    embedding=embeddings,
+                )
             except TypeError:
                 # Last-resort: try constructing without passing embedding and hope the collection already
                 # contains embeddings (read-only). If that fails, propagate a helpful error.
                 try:
-                    vectordb = Chroma(persist_directory="chroma_db", collection_name="testing")
+                    vectordb = Chroma(
+                        persist_directory="chroma_db", collection_name="testing"
+                    )
                 except Exception as e:
                     raise RuntimeError(
                         "Unable to instantiate Chroma with the installed langchain-chroma package. "
@@ -124,91 +139,105 @@ def get_retriever():
         return _retriever
     except Exception as e:
         raise RuntimeError(f"Failed to create retriever: {e}")
-    
+
+
 class PredictRequest(BaseModel):
     # either features for a single sample, or omitted when uploading CSV
     features: Optional[List[float]] = None
 
 
 @app.post("/predict")
-async def predict(files: Optional[List[UploadFile]] = File(None), payload: Optional[PredictRequest] = None):
-    """Predict endpoint: accepts an uploaded CSV file (preferred) or a JSON body with `features` as fallback.
+async def predict(file: UploadFile = File(...)):
+    """Minimal CSV-only predict endpoint.
 
-    CSV flow (preferred):
-      - read the first uploaded file as CSV (header allowed)
-      - extract `id` column if present (otherwise use row indices)
-      - drop `id` (and `class` if present) and use remaining columns as features
-      - run prediction per-row using `predict_single` and return a list of {id, prediction, raw}
-
-    JSON flow (fallback): {"features": [f1, f2, ...]} returns a single prediction.
+    Behavior:
+      - Accepts exactly one uploaded CSV file (required)
+      - Expects an `id` column and numeric feature columns (like `exo_10.csv`)
+      - Uses the TestModel/lgbm_model.pkl (loaded lazily) to predict each row
+      - Returns a simple list: [{"id": <id>, "label": "<label>"}, ...]
     """
     try:
-        bundle = _get_model_bundle()
+        # read uploaded file
+        raw = await file.read()
+        try:
+            text = raw.decode("utf-8")
+        except Exception:
+            text = raw.decode("latin-1")
 
-        # If files provided, expect CSV in the first file (primary flow)
-        if files and len(files) > 0:
-            f = files[0]
-            raw = await f.read()
+        from io import StringIO
+        import pandas as pd
+
+        try:
+            df = pd.read_csv(StringIO(text))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Failed to parse CSV file")
+
+        if df.shape[0] == 0:
+            raise HTTPException(status_code=400, detail="Empty CSV file")
+
+        # ensure id column is present
+        if "id" not in df.columns:
+            raise HTTPException(
+                status_code=400, detail="CSV must contain an 'id' column"
+            )
+
+        ids = df["id"].tolist()
+        X_df = df.drop(columns=["id"])
+
+        # ensure numeric features
+        try:
+            X = X_df.astype(float)
+        except Exception:
             try:
-                text = raw.decode("utf-8")
+                X = X_df.apply(pd.to_numeric, errors="raise")
             except Exception:
-                text = raw.decode("latin-1")
+                raise HTTPException(
+                    status_code=400,
+                    detail="CSV contains non-numeric values in feature columns",
+                )
 
-            # Use pandas for robust CSV parsing and numeric conversion
-            from io import StringIO
-            import pandas as pd
+        # lazy-load model from TestModel/lgbm_model.pkl (mimics test.py behavior)
+        global SIMPLE_MODEL
+        if "SIMPLE_MODEL" not in globals() or SIMPLE_MODEL is None:
+            repo_file = pathlib.Path(__file__).resolve()
+            found = None
+            for p in repo_file.parents:
+                candidate = p / "models" / "lgbm_model.pkl"
+                if candidate.exists():
+                    found = candidate
+                    break
+            if not found:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Model file TestModel/lgbm_model.pkl not found",
+                )
+            import pickle
 
+            with open(found, "rb") as fh:
+                SIMPLE_MODEL = pickle.load(fh)
+
+        label_map = {0: "CANDIDATE", 1: "CONFIRMED", 2: "FALSE POSITIVE"}
+
+        results = []
+        for idx, row in X.iterrows():
+            feats = row.tolist()
             try:
-                df = pd.read_csv(StringIO(text))
-            except Exception:
-                raise HTTPException(status_code=400, detail="Failed to parse CSV file")
+                preds = SIMPLE_MODEL.predict([feats])
+                pred0 = preds[0]
+            except Exception as e:
+                logging.error("Model prediction failed for row %s: %s", idx, e)
+                results.append({"id": ids[idx], "label": None})
+                continue
 
-            if df.shape[0] == 0:
-                raise HTTPException(status_code=400, detail="Empty CSV file")
-
-            # Extract ids (if present) otherwise use row indices
-            if 'id' in df.columns:
-                ids = df['id'].tolist()
-            else:
-                ids = list(range(len(df)))
-
-            # drop id and class (if present) before prediction
-            drop_cols = [c for c in ('id', 'class') if c in df.columns]
-            X_df = df.drop(columns=drop_cols)
-
-            # Ensure numeric features
+            # map numeric prediction to label if possible
             try:
-                X = X_df.astype(float)
+                lab = label_map.get(int(pred0), str(pred0))
             except Exception:
-                try:
-                    X = X_df.apply(pd.to_numeric, errors='raise')
-                except Exception:
-                    raise HTTPException(status_code=400, detail="CSV contains non-numeric values in feature columns")
+                lab = str(pred0)
 
-            predictions = []
-            for idx, row in X.iterrows():
-                feats = row.tolist()
-                try:
-                    res = predict_single(bundle, feats)
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Prediction failed for row {idx}: {e}")
+            results.append({"id": ids[idx], "label": lab})
 
-                predictions.append({
-                    'id': ids[idx],
-                    'prediction': res.get('prediction'),
-                    'raw': res.get('raw'),
-                    'success': res.get('success', False),
-                })
-
-            return {"predictions": predictions}
-
-        # JSON fallback: single-sample features
-        if payload is not None and payload.features is not None:
-            res = predict_single(bundle, payload.features)
-            return {"predictions": [{"id": None, "prediction": res.get('prediction'), "raw": res.get('raw'), "success": res.get('success', False)}]}
-
-        # nothing to do
-        raise HTTPException(status_code=400, detail="Upload a CSV file or provide features JSON")
+        return {"predictions": results}
     except HTTPException:
         raise
     except Exception as e:
@@ -226,7 +255,10 @@ def get_llm():
     if groq_key:
         try:
             from langchain_groq import ChatGroq
-            _llm = ChatGroq(model=os.getenv("MODEL_NAME", "openai/gpt-oss-20b"), api_key=groq_key)
+
+            _llm = ChatGroq(
+                model=os.getenv("MODEL_NAME", "openai/gpt-oss-20b"), api_key=groq_key
+            )
             return _llm
         except Exception as e:
             # If model lib is missing, fall through and return None
@@ -245,7 +277,9 @@ async def chat(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {e}")
 
-    retrieved_texts = [d.page_content if hasattr(d, 'page_content') else str(d) for d in docs]
+    retrieved_texts = [
+        d.page_content if hasattr(d, "page_content") else str(d) for d in docs
+    ]
 
     # If no LLM configured, return the retrieved passages as a fallback answer
     if llm is None:
@@ -271,7 +305,9 @@ Question:
 """,
         )
 
-        chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, chain_type_kwargs={"prompt": prompt})
+        chain = RetrievalQA.from_chain_type(
+            llm=llm, retriever=retriever, chain_type_kwargs={"prompt": prompt}
+        )
         result = chain.run(req.question)
         return ChatResponse(answer=result, retrieved=retrieved_texts)
     except Exception as e:
@@ -303,9 +339,12 @@ async def stream_chat(question: str):
         def error_gen():
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
             yield "event: done\ndata: \n\n"
+
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
-    retrieved_texts = [d.page_content if hasattr(d, 'page_content') else str(d) for d in docs]
+    retrieved_texts = [
+        d.page_content if hasattr(d, "page_content") else str(d) for d in docs
+    ]
 
     async def event_generator():
         # First send retrieved context as one or more context events
@@ -340,9 +379,11 @@ Question:
             )
 
             # If the LLM supports streaming, try to hook into its streaming API
-            if hasattr(llm, 'stream') or hasattr(llm, 'generate_stream'):
+            if hasattr(llm, "stream") or hasattr(llm, "generate_stream"):
                 # Many LLM wrappers expose some streaming generator. We'll try common names.
-                stream_fn = getattr(llm, 'stream', None) or getattr(llm, 'generate_stream', None)
+                stream_fn = getattr(llm, "stream", None) or getattr(
+                    llm, "generate_stream", None
+                )
                 if stream_fn is not None:
                     # Try to call stream function with question/context; the exact signature varies by LLM wrapper
                     try:
@@ -358,18 +399,20 @@ Question:
                         pass
 
             # Fallback: run the chain and stream the result progressively by tokenizing locally
-            chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, chain_type_kwargs={"prompt": prompt})
+            chain = RetrievalQA.from_chain_type(
+                llm=llm, retriever=retriever, chain_type_kwargs={"prompt": prompt}
+            )
             result = chain.run(question)
 
             # Simple token-level progressive streaming: split by whitespace tokens
             tokens = result.split()
-            buffer = ''
+            buffer = ""
             for i, tk in enumerate(tokens):
-                buffer += tk + ' '
+                buffer += tk + " "
                 # yield every 8 tokens (tunable) to simulate streaming
                 if i % 8 == 0:
                     yield f"event: chunk\ndata: {json.dumps({'text': buffer})}\n\n"
-                    buffer = ''
+                    buffer = ""
                     # tiny sleep to let client render progressively (non-blocking in async generator)
                     time.sleep(0.01)
             if buffer:
@@ -386,7 +429,7 @@ class ReindexRequest(BaseModel):
     pdf_path: str
 
 
-@app.post('/reindex')
+@app.post("/reindex")
 async def reindex(req: ReindexRequest):
     """Reindex a PDF into the local Chroma DB. This will overwrite the `testing` collection's contents.
 
@@ -409,23 +452,46 @@ async def reindex(req: ReindexRequest):
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         chunks = splitter.split_documents(docs)
 
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
 
         # Try common constructors for Chroma.from_documents or Chroma(...).from_documents
         try:
-            vectordb = Chroma.from_documents(chunks, embedding=embeddings, persist_directory="chroma_db", collection_name="testing")
+            vectordb = Chroma.from_documents(
+                chunks,
+                embedding=embeddings,
+                persist_directory="chroma_db",
+                collection_name="testing",
+            )
         except TypeError:
             try:
-                vectordb = Chroma.from_documents(chunks, embedding_function=embeddings, persist_directory="chroma_db", collection_name="testing")
+                vectordb = Chroma.from_documents(
+                    chunks,
+                    embedding_function=embeddings,
+                    persist_directory="chroma_db",
+                    collection_name="testing",
+                )
             except Exception:
                 # Fall back to building a new Chroma and adding documents if necessary
                 try:
-                    vectordb = Chroma(persist_directory="chroma_db", collection_name="testing", embedding_function=embeddings)
+                    vectordb = Chroma(
+                        persist_directory="chroma_db",
+                        collection_name="testing",
+                        embedding_function=embeddings,
+                    )
                     vectordb.add_documents(chunks)
                 except Exception as e:
                     raise RuntimeError(f"Failed to create or populate Chroma: {e}")
 
-        return {"status": "ok", "count": getattr(vectordb, '_collection', {}).count() if hasattr(vectordb, '_collection') else None}
+        return {
+            "status": "ok",
+            "count": (
+                getattr(vectordb, "_collection", {}).count()
+                if hasattr(vectordb, "_collection")
+                else None
+            ),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
