@@ -8,8 +8,6 @@ langchain-chroma
 chromadb
 sentence-transformers
 requests
-lightgbm
-pickle
 langchain_huggingface
 langchain
 lightkurve
