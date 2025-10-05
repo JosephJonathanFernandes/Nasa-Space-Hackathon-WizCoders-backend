@@ -1,72 +1,142 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Python bytecode# Byte-compiled / optimized / DLL files
 
-# C extensions
-*.so
+__pycache__/__pycache__/
 
-# Distribution / packaging
-.Python
-build/
+*.py[cod]*.py[cod]
+
+*$py.class*$py.class
+
+
+
+# Virtual environments# C extensions
+
+venv/*.so
+
+.env/
+
+ENV/# Distribution / packaging
+
+.env/.Python
+
+.venv/build/
+
 develop-eggs/
-dist/
-downloads/
-eggs/
+
+# dotenv local filesdist/
+
+.envdownloads/
+
+.env.*eggs/
+
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
+
+# Distribution / packaginglib/
+
+.Pythonlib64/
+
+build/parts/
+
+dist/sdist/
+
+*.egg-info/var/
+
+.eggs/*.egg-info/
+
 .installed.cfg
-*.egg
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Installer logs*.egg
 
-# Installer logs
 pip-log.txt
-pip-delete-this-directory.txt
 
-# Unit test / coverage reports
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-hypothesis/
+pip-delete-this-directory.txt# PyInstaller
+
+#  Usually these files are written by a python script from a template
+
+# Unit test / coverage#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+
+.coverage*.manifest
+
+.coverage.**.spec
+
 .pytest_cache/
 
-# Translations
+.cache/# Installer logs
+
+pip-log.txt
+
+# Jupyterpip-delete-this-directory.txt
+
+.ipynb_checkpoints
+
+# Unit test / coverage reports
+
+# VSCode.coverage
+
+.vscode/.coverage.*
+
+.cache
+
+# Mac / Windowsnosetests.xml
+
+.DS_Storecoverage.xml
+
+Thumbs.dbhypothesis/
+
+.pytest_cache/
+
+# Node
+
+node_modules/# Translations
+
 *.mo
-*.pot
 
-# Django stuff:
-*.log
+# Chroma/Vector DB and local DBs*.pot
+
+chroma_db/
+
+.chroma/# Django stuff:
+
+chroma.sqlite3*.log
+
 local_settings.py
-db.sqlite3
-db.sqlite3-journal
 
-# Flask stuff
-instance/
+# Logsdb.sqlite3
+
+logs/db.sqlite3-journal
+
+
+
+# IDEs# Flask stuff
+
+/.idea/instance/
+
 .webassets-cache
 
-# Scrapy stuff
+# Build outputs
+
+frontend/build/# Scrapy stuff
+
 .scrapy
 
-# Sphinx documentation
-docs/_build/
+# Exclude environment files and credentials
 
-# PyBuilder
-.pybuilder/
+credentials.json# Sphinx documentation
 
-# Jupyter Notebook
-.ipynb_checkpoints
+secrets.jsondocs/_build/
+
+
+
+# compiled# PyBuilder
+
+*.pyc.pybuilder/
+
+*.class
+
+*.dll# Jupyter Notebook
+
+*.exe.ipynb_checkpoints
+
+*.o
 
 # IPython
 profile_default/
