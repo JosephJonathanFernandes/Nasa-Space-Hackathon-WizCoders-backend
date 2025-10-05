@@ -14,6 +14,13 @@ import pathlib
 import io
 import matplotlib.pyplot as plt
 from lightkurve import read
+import lightkurve as lk
+import tempfile
+import numpy as np
+
+# Set up logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Prefer relative import when the package is imported as `webapp.backend`.
 # This allows `uvicorn webapp.backend.main:app` to find `model_utils` in the same package.
@@ -267,6 +274,79 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/lightcurve/{kepler_id}")
+async def get_lightcurve(kepler_id: str, mission: str = "Kepler"):
+    """
+    Generate a light curve plot for the given Kepler ID or TIC ID.
+    
+    Args:
+        kepler_id: The Kepler ID, KIC ID, or TIC ID (e.g., "KIC 11904151", "TIC 259377017")
+        mission: The mission to search for ("Kepler", "TESS", or "K2"). Default is "Kepler"
+    
+    Returns:
+        PNG image of the light curve plot
+    """
+    try:
+        logger.info(f"Searching for light curve: {kepler_id}, mission: {mission}")
+        
+        # Search for light curves
+        search_result = lk.search_lightcurve(kepler_id, mission=mission)
+        
+        if len(search_result) == 0:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No light curves found for {kepler_id} in {mission} mission"
+            )
+        
+        logger.info(f"Found {len(search_result)} light curves")
+        
+        # Download the first available light curve
+        lc = search_result.download()
+        
+        if lc is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not download light curve for {kepler_id}"
+            )
+        
+        logger.info(f"Downloaded light curve with {len(lc)} data points")
+        
+        # Create the plot
+        plt.figure(figsize=(12, 6))
+        lc.plot()
+        plt.title(f"{mission} Light Curve for {kepler_id}")
+        plt.xlabel("Time")
+        plt.ylabel("Flux")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save plot to BytesIO buffer
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+        img_buffer.seek(0)
+        plt.close()  # Close the figure to free memory
+        
+        return StreamingResponse(
+            io.BytesIO(img_buffer.read()),
+            media_type="image/png",
+            headers={"Content-Disposition": f"inline; filename={kepler_id}_lightcurve.png"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing {kepler_id}: {str(e)}")
+        
+        # Close any open figures to prevent memory leaks
+        plt.close('all')
+        
+        if isinstance(e, HTTPException):
+            raise e
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error while processing {kepler_id}: {str(e)}"
+            )
+
+
 @app.post("/upload_fits")
 async def upload_fits_file(file: UploadFile = File(...)):
     """Upload a FITS file, read a light curve using lightkurve, and return a PNG plot.
@@ -275,21 +355,123 @@ async def upload_fits_file(file: UploadFile = File(...)):
     """
     try:
         contents = await file.read()
-        lc_file = io.BytesIO(contents)
+        # Write uploaded bytes to a temporary file. Some FITS readers (astropy/lightkurve)
+        # may close or expect a real file-like object; using a temp file avoids errors
+        # like "Cannot read from/write to a closed file-like object" when objects
+        # lazily access the underlying file. Keep the temp file around until we're
+        # done plotting, then remove it. If an error occurs while reading, remove
+        # the temp file and re-raise.
+        tmp_path = None
+        try:
+            tmp = tempfile.NamedTemporaryFile(suffix=".fits", delete=False)
+            tmp_path = tmp.name
+            tmp.write(contents)
+            tmp.flush()
+            tmp.close()
 
-        # Use lightkurve to read the file. This returns a LightCurve or LightCurveCollection.
-        lc = read(lc_file)
+            # Use lightkurve to read the file. This returns a LightCurve or LightCurveCollection.
+            try:
+                lc = read(tmp_path)
+            except Exception as _ll_err:
+                # Some versions of lightkurve/astropy may read into an internal
+                # BytesIO which can be closed; fall back to using astropy directly
+                # to extract TIME/FLUX columns if available.
+                try:
+                    from astropy.io import fits as _fits
 
-        # For LightCurveCollection, pick the first LightCurve
+                    hdul = _fits.open(tmp_path, memmap=False)
+                    time_arr = None
+                    flux_arr = None
+                    for hdu in hdul:
+                        data = getattr(hdu, 'data', None)
+                        if data is None:
+                            continue
+                        # Try table-like columns
+                        cols = []
+                        try:
+                            cols = list(data.columns.names)
+                        except Exception:
+                            try:
+                                cols = list(data.dtype.names or [])
+                            except Exception:
+                                cols = []
+
+                        keys = [c.upper() for c in cols]
+                        if 'TIME' in keys:
+                            # choose a likely flux column
+                            flux_candidates = ['PDCSAP_FLUX', 'SAP_FLUX', 'FLUX', 'PDCSAP_FLUX']
+                            found_flux = None
+                            for fc in flux_candidates:
+                                if fc in keys:
+                                    found_flux = cols[keys.index(fc)]
+                                    break
+                            if found_flux is not None:
+                                time_arr = data[cols[keys.index('TIME')]]
+                                flux_arr = data[found_flux]
+                                break
+
+                    # If we found arrays, build a minimal dummy object to match expected API
+                    if time_arr is not None and flux_arr is not None:
+                        class _DummyLC:
+                            def __init__(self, t, f):
+                                self.time = type('T', (), {'value': t})
+                                self.flux = type('F', (), {'value': f})
+
+                        lc = _DummyLC(time_arr, flux_arr)
+                    else:
+                        # re-raise original lightkurve error if fallback couldn't parse
+                        raise _ll_err
+                except Exception:
+                    # If astropy isn't available or parsing fails, propagate the
+                    # original error to be handled by the outer except.
+                    raise _ll_err
+        except Exception:
+            # Clean up on error and propagate
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+            raise
+
+        # For LightCurveCollection, pick the first LightCurve or use the
+        # values provided by the dummy object created above. Normalize flux to 1D
+        def _flux_to_1d(time_arr, flux_arr):
+            t = np.asarray(time_arr)
+            f = np.asarray(flux_arr)
+
+            # If already 1D and length matches time, return
+            if f.ndim == 1 and f.shape[0] == t.shape[0]:
+                return f
+
+            # If first axis matches time length, average over remaining axes
+            if f.shape[0] == t.shape[0]:
+                return np.nanmean(f.reshape(f.shape[0], -1), axis=1)
+
+            # Search for an axis that matches time length and move it to axis 0
+            for axis in range(f.ndim):
+                if f.shape[axis] == t.shape[0]:
+                    f_moved = np.moveaxis(f, axis, 0)
+                    return np.nanmean(f_moved.reshape(f_moved.shape[0], -1), axis=1)
+
+            # Last resort: try to flatten to (time_len, -1)
+            try:
+                f_flat = f.reshape(t.shape[0], -1)
+                return np.nanmean(f_flat, axis=1)
+            except Exception:
+                raise ValueError(f"Could not convert flux array of shape {f.shape} to 1D matching time length {t.shape[0]}")
+
         try:
             time_arr = lc.time.value
             flux_arr = lc.flux.value
+            flux_arr = _flux_to_1d(time_arr, flux_arr)
         except Exception:
             # Try indexing if it's a collection
             if hasattr(lc, '__len__') and len(lc) > 0:
                 single = lc[0]
                 time_arr = single.time.value
                 flux_arr = single.flux.value
+                flux_arr = _flux_to_1d(time_arr, flux_arr)
             else:
                 raise
 
@@ -306,6 +488,13 @@ async def upload_fits_file(file: UploadFile = File(...)):
         plt.savefig(buf, format='png')
         buf.seek(0)
         plt.close()
+
+        # Clean up the temporary FITS file now that we're done with lightkurve
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
         return StreamingResponse(buf, media_type="image/png")
 
