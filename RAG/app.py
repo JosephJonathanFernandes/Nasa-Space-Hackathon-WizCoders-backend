@@ -14,12 +14,25 @@ except Exception:
     _gemma_placeholder = None
 from retriever import Retriever
 from config import GEMMA_API_KEY, client
+from model_utils import load_bundle, predict_single
 
 if not GEMMA_API_KEY:
     print("Warning: GEMMA_API_KEY not set. /chat will fail until it's provided in the environment.")
 
 app = FastAPI(title="RAG Prototype")
 retriever = Retriever()
+# Load model bundle lazily on first request and cache
+_MODEL_BUNDLE = None
+
+
+def _get_model_bundle():
+    global _MODEL_BUNDLE
+    if _MODEL_BUNDLE is None:
+        # load from default models directory inside RAG/models
+        base = os.path.dirname(__file__)
+        models_dir = os.path.join(base, "models")
+        _MODEL_BUNDLE = load_bundle(models_dir=models_dir)
+    return _MODEL_BUNDLE
 
 
 class QueryRequest(BaseModel):
@@ -45,6 +58,77 @@ async def ingest(files: List[UploadFile] = File(...)):
         retriever.add_documents_from_string(content, source=f.filename)
         saved.append(f.filename)
     return {"ingested_files": saved}
+
+
+class PredictRequest(BaseModel):
+    # either features for a single sample, or omitted when uploading CSV
+    features: Optional[List[float]] = None
+
+
+@app.post("/predict")
+async def predict(files: Optional[List[UploadFile]] = File(None), payload: Optional[PredictRequest] = None):
+    """Predict endpoint: accepts either an uploaded CSV file (first row header optional) or a JSON body with `features`.
+
+    CSV format: numeric columns only (or columns will be converted to floats). Returns per-row predictions.
+    JSON format: {"features": [f1, f2, ...]} returns a single prediction.
+    """
+    try:
+        bundle = _get_model_bundle()
+
+        # If JSON payload provided and has features, run single prediction
+        if payload is not None and payload.features is not None:
+            res = predict_single(bundle, payload.features)
+            return {"predictions": [res]}
+
+        # If files provided, expect CSV in the first file
+        if files and len(files) > 0:
+            f = files[0]
+            raw = await f.read()
+            text = None
+            try:
+                text = raw.decode("utf-8")
+            except Exception:
+                text = raw.decode("latin-1")
+
+            # parse CSV into rows of floats
+            import csv
+            from io import StringIO
+
+            reader = csv.reader(StringIO(text))
+            rows = list(reader)
+            # If first row looks like header (non-numeric), skip it
+            def _is_numeric_row(r):
+                try:
+                    [float(x) for x in r]
+                    return True
+                except Exception:
+                    return False
+
+            if len(rows) == 0:
+                raise HTTPException(status_code=400, detail="Empty CSV file")
+
+            if not _is_numeric_row(rows[0]) and len(rows) > 1 and _is_numeric_row(rows[1]):
+                rows = rows[1:]
+
+            predictions = []
+            for r in rows:
+                try:
+                    feats = [float(x) for x in r]
+                except Exception:
+                    raise HTTPException(status_code=400, detail=f"Non-numeric value in row: {r}")
+                pred = predict_single(bundle, feats)
+                predictions.append(pred)
+
+            return {"predictions": predictions}
+
+        # nothing to do
+        raise HTTPException(status_code=400, detail="Provide features JSON or upload a CSV file")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error("Error in /predict: %s", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _build_prompt(question: str, docs: List[Dict[str, Any]]) -> List[Dict[str, str]]:
