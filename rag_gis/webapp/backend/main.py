@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import os
@@ -7,6 +7,58 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import json
 import time
+import logging
+import traceback
+import sys
+import pathlib
+
+# Prefer relative import when the package is imported as `webapp.backend`.
+# This allows `uvicorn webapp.backend.main:app` to find `model_utils` in the same package.
+try:
+    # When running as a package (recommended), use a relative import
+    from .model_utils import load_bundle, predict_single  # type: ignore
+except Exception:
+    # Fall back to previous heuristic: attempt top-level module import by adding
+    # the repo RAG folder to sys.path if necessary (keeps backwards compatibility
+    # with running the module from different working directories).
+    repo_file = pathlib.Path(__file__).resolve()
+    try:
+        rag_dir = repo_file.parents[3] / 'RAG'
+        sys.path.insert(0, str(rag_dir))
+        from model_utils import load_bundle, predict_single
+    except Exception:
+        # final fallback: try importing a sibling `model_utils` at package level
+        try:
+            from model_utils import load_bundle, predict_single
+        except Exception:
+            # re-raise the original ImportError to preserve traceback
+            raise
+
+# Load model bundle lazily on first request and cache
+_MODEL_BUNDLE = None
+
+
+def _get_model_bundle():
+    """Locate and load the model bundle from the RAG `models/` directory.
+
+    This tries to find `RAG/models` relative to this file; if not found it falls back
+    to a `models` dir next to this file.
+    """
+    global _MODEL_BUNDLE
+    if _MODEL_BUNDLE is None:
+        # preferred models directory: backend/RAG/models (use same repo layout)
+        this_file = pathlib.Path(__file__).resolve()
+        try:
+            rag_dir = this_file.parents[3] / 'RAG'
+            models_dir = str(rag_dir / 'models')
+            if not os.path.exists(models_dir):
+                # fallback to local models dir next to this file
+                models_dir = os.path.join(os.path.dirname(__file__), "models")
+        except Exception:
+            models_dir = os.path.join(os.path.dirname(__file__), "models")
+
+        _MODEL_BUNDLE = load_bundle(models_dir=models_dir)
+    return _MODEL_BUNDLE
 
 load_dotenv()
 
@@ -72,6 +124,76 @@ def get_retriever():
         return _retriever
     except Exception as e:
         raise RuntimeError(f"Failed to create retriever: {e}")
+    
+class PredictRequest(BaseModel):
+    # either features for a single sample, or omitted when uploading CSV
+    features: Optional[List[float]] = None
+
+
+@app.post("/predict")
+async def predict(files: Optional[List[UploadFile]] = File(None), payload: Optional[PredictRequest] = None):
+    """Predict endpoint: accepts either an uploaded CSV file (first row header optional) or a JSON body with `features`.
+
+    CSV format: numeric columns only (or columns will be converted to floats). Returns per-row predictions.
+    JSON format: {"features": [f1, f2, ...]} returns a single prediction.
+    """
+    try:
+        bundle = _get_model_bundle()
+
+        # If JSON payload provided and has features, run single prediction
+        if payload is not None and payload.features is not None:
+            res = predict_single(bundle, payload.features)
+            return {"predictions": [res]}
+
+        # If files provided, expect CSV in the first file
+        if files and len(files) > 0:
+            f = files[0]
+            raw = await f.read()
+            text = None
+            try:
+                text = raw.decode("utf-8")
+            except Exception:
+                text = raw.decode("latin-1")
+
+            # parse CSV into rows of floats
+            import csv
+            from io import StringIO
+
+            reader = csv.reader(StringIO(text))
+            rows = list(reader)
+            # If first row looks like header (non-numeric), skip it
+            def _is_numeric_row(r):
+                try:
+                    [float(x) for x in r]
+                    return True
+                except Exception:
+                    return False
+
+            if len(rows) == 0:
+                raise HTTPException(status_code=400, detail="Empty CSV file")
+
+            if not _is_numeric_row(rows[0]) and len(rows) > 1 and _is_numeric_row(rows[1]):
+                rows = rows[1:]
+
+            predictions = []
+            for r in rows:
+                try:
+                    feats = [float(x) for x in r]
+                except Exception:
+                    raise HTTPException(status_code=400, detail=f"Non-numeric value in row: {r}")
+                pred = predict_single(bundle, feats)
+                predictions.append(pred)
+
+            return {"predictions": predictions}
+
+        # nothing to do
+        raise HTTPException(status_code=400, detail="Provide features JSON or upload a CSV file")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error("Error in /predict: %s", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def get_llm():

@@ -12,6 +12,8 @@ __pycache__/__pycache__/
 
 venv/*.so
 
+.venv/
+
 .env/
 
 ENV/# Distribution / packaging
