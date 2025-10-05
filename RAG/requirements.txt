@@ -1,0 +1,30 @@
+fastapi>=0.85.1,<1.0
+uvicorn[standard]==0.22.0
+
+# core/runtime
+numpy>=1.26.0
+requests==2.31.0
+pydantic==1.10.12
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# embeddings / NLP
+sentence-transformers==2.2.2
+transformers==4.35.2
+huggingface-hub>=0.18.0
+PyPDF2>=3.0.0
+
+# Optional: install hf_xet for improved XET-backed caching performance on HF hub
+# pip install "huggingface_hub[hf_xet]"  OR  pip install hf_xet
+
+# Note: If you have a vendor Gemma SDK available, install it here (package name
+# depends on your vendor). Otherwise the application supports using an
+# OpenRouter/Gemma-compatible HTTP endpoint via GEMMA_BASE_URL in `config.py`.
+
+# Optional: for fast vector search. On Windows use the cpu build: `pip install faiss-cpu`.
+# Installing faiss is optional; the demo script falls back to a NumPy retriever if faiss is not available.
+faiss-cpu; platform_system=="Windows"
+ 
+# For loading pickled sklearn scalers and label encoders and LightGBM models
+scikit-learn>=1.2.2
+lightgbm>=3.3.5
