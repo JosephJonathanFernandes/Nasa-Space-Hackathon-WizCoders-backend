@@ -1,9 +1,0 @@
-body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-.chat-root { display:flex; flex-direction:column; height:100vh; }
-.chat-window { flex:1; padding:16px; overflow:auto; background:#f5f5f7 }
-.msg { margin-bottom:12px; max-width:80%; padding:8px 12px; border-radius:8px }
-.msg.user { background:#0b5fff; color:white; margin-left:auto }
-.msg.bot { background:#ffffff; color:#111; margin-right:auto }
-.chat-input { display:flex; padding:8px; gap:8px; border-top:1px solid #e5e5e5 }
-.chat-input input { flex:1; padding:8px 12px; border-radius:6px; border:1px solid #ddd }
-.chat-input button { padding:8px 12px; border-radius:6px; border:none; background:#0b5fff; color:white }
