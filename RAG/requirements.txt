@@ -24,7 +24,3 @@ PyPDF2>=3.0.0
 # Optional: for fast vector search. On Windows use the cpu build: `pip install faiss-cpu`.
 # Installing faiss is optional; the demo script falls back to a NumPy retriever if faiss is not available.
 faiss-cpu; platform_system=="Windows"
- 
-# For loading pickled sklearn scalers and label encoders and LightGBM models
-scikit-learn>=1.2.2
-lightgbm>=3.3.5

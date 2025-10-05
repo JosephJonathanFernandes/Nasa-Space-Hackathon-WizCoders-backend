@@ -48,18 +48,3 @@ python backend\RAG\gemma_rag.py query --index backend\RAG\index.npz --query "How
 ```
 
 The script uses OpenRouter (https://openrouter.ai) endpoints for embeddings and chat. Make sure `OPENROUTER_API_KEY` is set.
-
-Model prediction endpoint
-
-Place your pickled model artifacts in `backend/RAG/models/`. The server will look for these filenames by default:
-- `lgbm_model.pkl` or `model.pkl` (the trained model)
-- `scaler.pkl` (scikit-learn scaler used at training time)
-- `le.pkl` or `label_encoder.pkl` (LabelEncoder used to decode labels)
-
-Once files are placed, start the server and POST JSON to `/predict` on the running FastAPI server, for example:
-
-```json
-{ "features": [9.488036, 2.9575, 615.8, 2.26, 793.0, 93.59, 5455.0, 4.467, 0.927, 291.93423, 48.141651] }
-```
-
-The endpoint will return a JSON object containing the raw model output and a decoded `prediction` when a label encoder is present.

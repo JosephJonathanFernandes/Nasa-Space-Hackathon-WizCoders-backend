@@ -14,37 +14,12 @@ except Exception:
     _gemma_placeholder = None
 from retriever import Retriever
 from config import GEMMA_API_KEY, client
-from model_utils import load_bundle, predict_single
 
 if not GEMMA_API_KEY:
     print("Warning: GEMMA_API_KEY not set. /chat will fail until it's provided in the environment.")
 
 app = FastAPI(title="RAG Prototype")
 retriever = Retriever()
-
-# lazily load model bundle once on first request
-_MODEL_BUNDLE = None
-
-
-class PredictRequest(BaseModel):
-    features: List[float]
-
-
-@app.post("/predict")
-async def predict(req: PredictRequest):
-    """Predict class for a single row of features.
-
-    Expects JSON: {"features": [f1, f2, ..., fN]}
-    The endpoint will look for model artifacts in `backend/RAG/models/` by default.
-    """
-    global _MODEL_BUNDLE
-    try:
-        if _MODEL_BUNDLE is None:
-            _MODEL_BUNDLE = load_bundle()
-        res = predict_single(_MODEL_BUNDLE, req.features)
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 class QueryRequest(BaseModel):
