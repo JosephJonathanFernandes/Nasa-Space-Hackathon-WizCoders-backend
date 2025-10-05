@@ -1,4 +1,4 @@
-fastapi>=0.85.1,<1.0
+fastapi
 uvicorn[standard]==0.22.0
 # lightweight retriever dependencies
 numpy>=1.26.0
