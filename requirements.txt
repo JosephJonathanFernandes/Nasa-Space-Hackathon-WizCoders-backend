@@ -21,4 +21,3 @@ seaborn
 numpy
 pandas
 lightgbm
-pickle
