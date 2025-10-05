@@ -14,3 +14,9 @@ lightkurve
 langchain_chroma
 langchain_community
 python-multipart
+matplotlib
+seaborn
+numpy
+pandas
+lightgbm
+pickle
