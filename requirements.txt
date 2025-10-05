@@ -8,5 +8,15 @@ langchain-chroma
 chromadb
 sentence-transformers
 requests
-matplotlib
+langchain_huggingface
+langchain
 lightkurve
+langchain_chroma
+langchain_community
+python-multipart
+matplotlib
+seaborn
+numpy
+pandas
+lightgbm
+pickle
