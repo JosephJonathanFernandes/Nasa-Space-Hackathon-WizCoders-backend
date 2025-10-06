@@ -1,43 +1,87 @@
-This project requires either:
+# Dependencies & Configuration
 
-1) A Gemma/OpenRouter-compatible API endpoint (preferred):
-   - Set GEMMA_BASE_URL to the endpoint URL (for OpenRouter/Gemma-like HTTP API).
-   - Set GEMMA_API_KEY (or OPENROUTER_API_KEY) to the bearer token if required.
+This document explains the options for embeddings and LLM backends used by the Exoscope backend, environment variables you may need to set, and PowerShell examples for local development on Windows.
 
-   Example (PowerShell):
-   $env:GEMMA_API_KEY = 'your_token_here'
-   $env:GEMMA_BASE_URL = 'https://api.openrouter.example'
+Supported options
 
-2) Or install local sentence-transformers for on-machine embeddings:
-   - pip install sentence-transformers
+1) GROQ API key (preferred)
+   - If you are using GROQ (or a GROQ-compatible provider) for embeddings, retrieval, or chat, set `GROQ_API_KEY` and optionally `GROQ_BASE_URL`.
 
-Notes:
-- If neither option is available the server will raise a RuntimeError when trying to compute embeddings.
-- To install dependencies for the full FastAPI app (recommended):
-  pip install -r requirements.txt
+   PowerShell example (current session):
 
-- On Windows PowerShell you can set environment variables for the current session using:
-  $env:GEMMA_API_KEY = "your_api_key_here"
-  # or
-  $env:GEMMA_BASE_URL = "https://api.openrouter.example"
+   ```powershell
+   $env:GROQ_API_KEY = 'your_groq_key_here'
+   $env:GROQ_BASE_URL = 'https://api.sanity.io' # or your provider's endpoint
+   ```
 
-- To persist environment variables across sessions, use System Settings -> Environment Variables, or set them in your PowerShell profile.
+2) GROQ API key (Sanity GROQ or other GROQ-compatible services)
+   - If you are using a GROQ API for embeddings or search, set `GROQ_API_KEY` and optionally `GROQ_BASE_URL`.
+   - Update the backend configuration to prefer GROQ when `GROQ_API_KEY` is present.
 
-PDF ingestion support
-- The project now supports ingesting PDF files using `ingest.py`. This requires `PyPDF2` which is included in `requirements.txt`.
-- Usage:
-  python ingest.py <folder-containing-pdfs-and-txt>
+   PowerShell example:
 
-The script will recursively find `.txt` and `.pdf` files under the folder and ingest their text into the retriever.
+   ```powershell
+   $env:GROQ_API_KEY = 'your_groq_key_here'
+   $env:GROQ_BASE_URL = 'https://api.sanity.io' # or your provider's endpoint
+   ```
 
-Local deterministic fallback embedding (optional):
-- By default the app will use a deterministic SHA256-based embedding fallback when no Gemma client
-  and no `sentence-transformers` are available. This keeps the server running for development, but
-  embeddings produced this way are NOT semantically meaningful. To disable the fallback, set:
-  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '0'
+   Notes:
+   - The backend will attempt to use configured API keys in the following preference order: GROQ (if configured), other configured provider (e.g., OpenRouter), local sentence-transformers fallback.
+   - If you want the backend to use GROQ only for retrieval while keeping another provider for chat, configure both keys and the appropriate client selectors in your env or settings file.
 
-Example: enable fallback (default):
-  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '1'
+3) Local sentence-transformers (on-machine embeddings)
+   - Install local models when you want embeddings to be computed locally:
 
-Example: explicitly disable fallback:
-  $env:GEMMA_ALLOW_LOCAL_FALLBACK = '0'
+   ```powershell
+   python -m pip install -r requirements.txt
+   pip install sentence-transformers
+   ```
+
+   - Note: Local sentence-transformers require extra disk space and may have significant CPU/GPU requirements depending on the model.
+
+Fallback behavior
+
+- If no external API is available and `sentence-transformers` is not installed, the app can fall back to a deterministic SHA256-based embedding placeholder for development. This is NOT semantically meaningful and should only be used for local testing.
+- To explicitly allow or disallow fallback, set the environment variable `ALLOW_LOCAL_FALLBACK` to `'1'` (allow) or `'0'` (disable). Default: allow.
+
+PowerShell examples
+
+Set environment variables for a single PowerShell session:
+
+```powershell
+   $env:GROQ_API_KEY = 'your_groq_key_here'
+   $env:OPENROUTER_API_KEY = 'your_openrouter_key_here'
+   $env:OPENROUTER_BASE_URL = 'https://api.openrouter.example'
+   $env:ALLOW_LOCAL_FALLBACK = '1'
+```
+
+Persist variables across sessions by adding them to System Environment Variables or your PowerShell profile.
+
+Ingestion and PDF support
+
+- PDF ingestion requires `PyPDF2` (included in `requirements.txt` in RAG scripts). Use `ingest.py` in the RAG toolchain to ingest `.txt` and `.pdf` files into the retriever index.
+
+Troubleshooting
+
+- If embeddings look wrong or similarity is poor, double-check which API key is being used and whether a local model is inadvertently being used as a fallback.
+- For connection errors, verify `*_BASE_URL` and network access, and that API keys are valid and not expired.
+
+Examples
+
+- Ingest and build a local index (PowerShell):
+
+```powershell
+
+
+python backend\RAG\rag_demo.py ingest --docs-dir backend\RAG\docs --out backend\RAG\index.npz
+```
+
+- Query the saved index:
+
+```powershell
+
+
+python backend\RAG\rag_demo.py query --index backend\RAG\index.npz --query "How are exoplanets detected using the transit method?"
+```
+
+If you'd like I can also add a small example `env.example` file and a short code sample showing how to initialize the GROQ client in the backend code — tell me the preferred Python library or client conventions you want to use (we can implement a tiny wrapper if needed).
