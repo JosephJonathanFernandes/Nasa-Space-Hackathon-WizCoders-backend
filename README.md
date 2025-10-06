@@ -79,4 +79,3 @@ This repository is licensed under the MIT License — see `LICENSE` for details.
 
 ---
 
-If you want me to refine any section (add SMOKE tests, create a Dockerfile, or add GitHub Actions), tell me which and I'll add it.
