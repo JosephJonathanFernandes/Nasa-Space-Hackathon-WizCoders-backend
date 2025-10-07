@@ -77,5 +77,16 @@ This repository is licensed under the MIT License — see `LICENSE` for details.
 - NASA Kepler & TESS mission data
 - NASA Space Apps Global Hackathon community
 
+## Live demo / Deployments
+
+- Frontend (user-facing): https://nasaexoscope.vercel.app/ — Deployed frontend that provides the interactive UI for the project.
+
+- Backend (model / demo): https://giz17-space.hf.space — Hugging Face Space running the backend/model demo (useful for debugging and viewing the model endpoint).
+
+Try it
+
+- Visit the frontend URL for the full application experience.
+- Use the Hugging Face Space link to inspect the backend/model demo directly (helpful for debugging or showcasing the ML component).
+
 ---
 
