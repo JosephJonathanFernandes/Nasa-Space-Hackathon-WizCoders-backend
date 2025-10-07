@@ -5,14 +5,12 @@ langchain
 langchain-groq
 langchain-huggingface
 langchain-chroma
+langchain-community
 chromadb
 sentence-transformers
 requests
 langchain_huggingface
-langchain
 lightkurve
-langchain_chroma
-langchain_community
 python-multipart
 matplotlib
 seaborn
