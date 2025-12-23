@@ -58,11 +58,18 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed overview.
 - Example: `pytest tests/unit/`
 - Coverage goal: 90%+
 
+
 ## Dev Experience
-- Lint: `ruff src/`
-- Format: `black src/`
-- Pre-commit: see `.pre-commit-config.yaml`
-- CI: GitHub Actions (see below)
+- **Lint:** `ruff src/` (recommended)
+- **Format:** `black src/` (recommended)
+- **Pre-commit hooks:** Install with `pre-commit install` (see `.pre-commit-config.yaml`)
+- **CI:** GitHub Actions runs lint, test, and secret scan on every PR (see `.github/workflows/ci.yml`)
+
+### Recommended Tools
+- [Ruff](https://github.com/astral-sh/ruff) for linting
+- [Black](https://github.com/psf/black) for formatting
+- [pre-commit](https://pre-commit.com/) for hooks
+- [pytest](https://docs.pytest.org/) for testing
 
 ## GitHub Actions CI
 - Lint, test, and security scan on every PR

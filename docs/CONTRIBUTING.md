@@ -17,9 +17,14 @@ Thank you for considering contributing!
 - Never commit credentials or secrets
 - Validate and sanitize all inputs
 
+
+## Linting & Formatting
+- Run `ruff src/` and `black src/` before committing
+- Use `pre-commit install` to enable automatic checks
+
 ## Tests
 - Add or update unit/integration tests for your changes
-- Run all tests before submitting
+- Run all tests (`pytest`) before submitting
 
 ## Communication
 - Be respectful and collaborative
