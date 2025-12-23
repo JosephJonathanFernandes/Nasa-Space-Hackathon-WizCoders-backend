@@ -75,6 +75,6 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed overview.
 
 ---
 
-For more, see [docs/](docs/) and [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+For more, see [docs/](docs/) and [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 ## Live demo / Deployments
 

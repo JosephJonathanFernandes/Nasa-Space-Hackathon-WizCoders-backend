@@ -9,9 +9,9 @@ Thank you for considering contributing!
 - Submit a pull request with a clear description
 
 ## Code Style
-- Follow PEP8 and Clean Code principles
+- Follow PEP8, Clean Code, and SOLID principles
 - Use meaningful names and docstrings
-- Avoid hardcoded secrets; use environment variables
+- Avoid hardcoded secrets; use environment variables (see `.env.example`)
 
 ## Security
 - Never commit credentials or secrets
