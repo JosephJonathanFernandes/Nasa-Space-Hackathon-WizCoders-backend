@@ -18,8 +18,12 @@ Response
 
 We will acknowledge the report within 3 business days and work with you to remediate the issue. We appreciate responsible disclosure and may credit reporters in release notes (with permission).
 
-Security best practices for contributors
 
-- Do not commit secrets to the repository (use environment variables or a secrets manager).
-- Run unit tests and static checks locally before pushing.
-- Validate and sanitize all inputs, especially uploaded files.
+## Security Best Practices for Contributors
+
+- **Never commit secrets, API keys, or credentials to the repository.**
+- All sensitive configuration must be set via environment variables (see `.env.example`).
+- Use a secrets manager for production deployments.
+- Run unit tests and static checks (e.g., `pre-commit`, `ruff`, `black`, `pytest`) locally before pushing.
+- Validate and sanitize all inputs, especially uploaded files and user data.
+- This repository is monitored for secrets using [GitGuardian](https://www.gitguardian.com/) and CI checks.
