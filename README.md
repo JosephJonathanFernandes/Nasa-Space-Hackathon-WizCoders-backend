@@ -1,92 +1,80 @@
-# Exoscope — Backend
 
-This folder contains the backend services for the Exoscope project created for the NASA Space Apps Global Hackathon. The backend provides the FastAPI services, model utilities, and RAG (retrieval-augmented generation) tooling used by the frontend application.
+# Exoscope Backend — Professional Edition
 
-Important: The frontend and backend are maintained as separate repositories. Run each service independently during development and point the frontend to the backend URL using environment variables or `src/services/api.ts`.
+## Problem Statement
 
-## Table of contents
+This backend powers Exoscope, a NASA Space Apps project, providing secure, modular, and scalable APIs for retrieval-augmented generation (RAG), ML model serving, and data ingestion. Designed for clarity, extensibility, and security, it is ready for production and open-source collaboration.
 
-- Quick start
-- Configuration
-- Development
-- RAG / Ingestion
-- Dependencies
-- Contributing
-- Code of Conduct
-- Security
-- License
+## Architecture
 
-## Quick start
+- **src/**: Core logic (API, models, services, utils, config)
+- **tests/**: Unit and integration tests
+- **docs/**: Architecture, design, and contribution docs
+- **config/**: Environment and deployment configuration
+- **scripts/**: Automation and developer utilities
 
-Prerequisites
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed overview.
 
-- Python 3.10+ (or compatible)
-- pip
-- Optional: virtualenv or venv
+## Tech Stack
+- Python 3.10+
+- FastAPI (API layer)
+- Pydantic (validation)
+- Uvicorn (ASGI server)
+- ChromaDB (vector DB)
+- Pytest (testing)
+- Pre-commit, Black, Ruff (linting/formatting)
 
-Local development (example - PowerShell)
+## Setup & Usage
 
-```powershell
-# create and activate a virtual environment
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
-
-# install dependencies
-pip install -r requirements.txt
-
-# run the FastAPI server
-uvicorn rag_gis.webapp.backend.main:app --reload --port 8000
-```
-
-If your environment requires different module paths, consult the `rag_gis/README.md` and `DEPENDENCIES.md` for RAG-specific setup and examples.
+1. **Clone and prepare environment**
+	```sh
+	git clone <repo-url>
+	cd backend
+	python -m venv .venv
+	source .venv/bin/activate  # or .venv\\Scripts\\Activate.ps1 on Windows
+	pip install -r requirements.txt
+	cp .env.example .env  # Set secrets and config
+	```
+2. **Run the API**
+	```sh
+	uvicorn src.api.main:app --reload --port 8000
+	```
+3. **Run tests**
+	```sh
+	pytest
+	```
 
 ## Configuration
-
-- See `backend/DEPENDENCIES.md` for details on provider options (GROQ, OpenRouter, or local `sentence-transformers`) and environment variables such as `GROQ_API_KEY`, `GROQ_BASE_URL`, and `ALLOW_LOCAL_FALLBACK`.
-- Copy any `.env.example` files in RAG subfolders to `.env` and set credentials as required.
-
-## RAG / Ingestion
-
-The repository contains a RAG prototype under `rag_gis/` with scripts for ingesting PDF/TXT sources and building a local retriever index. See `rag_gis/README.md` for a detailed walkthrough and demo commands.
-
-## Dependencies
-
-See `DEPENDENCIES.md` and `requirements.txt` for the full list of Python packages and configuration notes.
-
-## Contributing
-
-Please follow `CONTRIBUTING.md` (already present). Short summary:
-
-- Open issues for bugs or features first.
-- Create small, focused pull requests against `main`.
-- Include tests where applicable.
-
-## Code of Conduct
-
-This project follows the Contributor Covenant. See `CODE_OF_CONDUCT.md` for details and reporting contacts.
+- All secrets/config via `.env` (never hardcoded)
+- See `.env.example` and `config/` for details
 
 ## Security
+- No secrets in code (see [SECURITY.md](SECURITY.md))
+- Input validation and error handling throughout
+- Dependency updates and static checks required
 
-Please see `SECURITY.md` in this folder for security disclosure guidance. If `SECURITY.md` does not exist yet, report privately to the maintainers (provide preferred contact) instead of public issues.
+## Testing
+- Tests in `tests/` (unit & integration)
+- Example: `pytest tests/unit/`
+- Coverage goal: 90%+
 
-## License
+## Dev Experience
+- Lint: `ruff src/`
+- Format: `black src/`
+- Pre-commit: see `.pre-commit-config.yaml`
+- CI: GitHub Actions (see below)
 
-This repository is licensed under the MIT License — see `LICENSE` for details.
+## GitHub Actions CI
+- Lint, test, and security scan on every PR
+- Example workflow in `.github/workflows/ci.yml`
 
-## Acknowledgments
-
-- NASA Kepler & TESS mission data
-- NASA Space Apps Global Hackathon community
-
-## Live demo / Deployments
-
-- Frontend (user-facing): https://nasaexoscope.vercel.app/ — Deployed frontend that provides the interactive UI for the project.
-
-- Backend (model / demo): https://giz17-space.hf.space — Hugging Face Space running the backend/model demo (useful for debugging and viewing the model endpoint).
-
-Try it
-
-- Visit the frontend URL for the full application experience.
-- Use the Hugging Face Space link to inspect the backend/model demo directly (helpful for debugging or showcasing the ML component).
+## Value
+- Modular, secure, and production-ready
+- Easy to extend and maintain
+- Recruiter- and reviewer-friendly
 
 ---
+
+For more, see [docs/](docs/) and [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+## Live demo / Deployments
 

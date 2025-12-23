@@ -1,179 +1,46 @@
-# Python bytecode# Byte-compiled / optimized / DLL files
+env/
+env.bak/
+venv.bak/
+ehthumbs.db
 
-__pycache__/__pycache__/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-*.py[cod]*.py[cod]
-
-*$py.class*$py.class
-
-
-
-# Virtual environments# C extensions
-
-venv/*.so
-
+# Virtual environments
 .venv/
-
-.env/
-
-ENV/# Distribution / packaging
-
-.env/.Python
-
-.venv/build/
-
-develop-eggs/
-
-# dotenv local filesdist/
-
-.envdownloads/
-
-.env.*eggs/
-
-.eggs/
-
-# Distribution / packaginglib/
-
-.Pythonlib64/
-
-build/parts/
-
-dist/sdist/
-
-*.egg-info/var/
-
-.eggs/*.egg-info/
-
-.installed.cfg
-
-# Installer logs*.egg
-
-pip-log.txt
-
-pip-delete-this-directory.txt# PyInstaller
-
-#  Usually these files are written by a python script from a template
-
-# Unit test / coverage#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-
-.coverage*.manifest
-
-.coverage.**.spec
-
-.pytest_cache/
-
-.cache/# Installer logs
-
-pip-log.txt
-
-# Jupyterpip-delete-this-directory.txt
-
-.ipynb_checkpoints
-
-# Unit test / coverage reports
-
-# VSCode.coverage
-
-.vscode/.coverage.*
-
-.cache
-
-# Mac / Windowsnosetests.xml
-
-.DS_Storecoverage.xml
-
-Thumbs.dbhypothesis/
-
-.pytest_cache/
-
-# Node
-
-node_modules/# Translations
-
-*.mo
-
-# Chroma/Vector DB and local DBs*.pot
-
-chroma_db/
-
-.chroma/# Django stuff:
-
-chroma.sqlite3*.log
-
-local_settings.py
-
-# Logsdb.sqlite3
-
-logs/db.sqlite3-journal
-
-
-
-# IDEs# Flask stuff
-
-/.idea/instance/
-
-.webassets-cache
-
-# Build outputs
-
-frontend/build/# Scrapy stuff
-
-.scrapy
-
-# Exclude environment files and credentials
-
-credentials.json# Sphinx documentation
-
-secrets.jsondocs/_build/
-
-
-
-# compiled# PyBuilder
-
-*.pyc.pybuilder/
-
-*.class
-
-*.dll# Jupyter Notebook
-
-*.exe.ipynb_checkpoints
-
-*.o
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# poetry
-poetry.lock
-
-# PEP 582; used by e.g. python-native-package
-__pypackages__/
-
-# dotenv
-.env
-.env.*
-
-# virtualenv
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 
-# VS Code
+# Environment variables
+.env
+.env.*
+
+# Database files
+*.sqlite3
+chroma_db/
+.chromadb/
+chroma.db
+db.sqlite3
+logs/
+logs/*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VSCode
 .vscode/
 
-# macOS
-.DS_Store
+# Test cache
+.pytest_cache/
+.cache/
 
-# Windows
+# OS files
+.DS_Store
 Thumbs.db
 ehthumbs.db
 Desktop.ini
@@ -184,14 +51,29 @@ node_modules/
 # Frontend build
 frontend/build/
 
-# Chroma/Vector DB files
-.chromadb/
-chroma.db
+# IDEs
+.idea/
 
-# Logs
-logs/
+# Misc
+local_settings.py
+credentials.json
+secrets.json
+profile_default/
+ipython_config.py
 
-# compiled files
+# Python packaging
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+develop-eggs/
+.installed.cfg
+Pipfile.lock
+poetry.lock
+__pypackages__/
+
+# Compiled files
 *.class
 *.dll
 *.exe
